@@ -1,15 +1,10 @@
 import { defineConfig } from "@neon/config/v1";
 
+// TrackAJob uses Neon for one thing: plain Postgres (ADR-0005).
+// The bundled services (Auth, AI Gateway, Functions, Realtime) are removed
+// because they are unused and the AI Gateway requires purchased credits.
+// Branch policy: per-branch tuning
 export default defineConfig({
-  // Declare your Neon services here
-  preview: {
-    realtime: true,
-  },
-  auth: true,
-  aiGateway: true,
-  // TrackAJob's backend runs as a Vercel serverless function (ADR-0005).
-  // Neon Functions stay unused, so no function entries here.
-  // Branch policy: per-branch tuning
   branch: (branch) => {
     if (branch.isDefault) {
       // Default branch: no overrides, uses project defaults
