@@ -1,0 +1,22 @@
+Backend Developer, Payments Team
+
+We are looking for a backend developer to join our payments group. You will design and build services that move customer money reliably, and you will own them in production.
+
+What you will do:
+- Design and ship Python services that handle payment processing, refunds, and reconciliation
+- Work with PostgreSQL at scale: schema design, query tuning, migrations
+- Build integrations with external payment providers and banks
+- Improve observability: structured logs, metrics, alerting on payment health
+- Participate in on-call rotation for the payments platform
+
+What we are looking for:
+- 3+ years of professional backend experience, ideally in Python
+- Solid SQL and PostgreSQL knowledge
+- Experience with REST API design and rollout of breaking changes
+- Comfort with Docker and CI/CD
+- Clear written communication and a preference for simple designs
+
+Nice to have:
+- Experience in fintech or payments
+- Kubernetes
+- Event-driven architectures (Kafka, queues)

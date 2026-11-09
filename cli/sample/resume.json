@@ -1,0 +1,58 @@
+{
+  "name": "Your Name",
+  "email": "you@example.com",
+  "phone": "+1 555 000 0000",
+  "location": "Your City",
+  "links": [
+    { "label": "LinkedIn", "url": "linkedin.com/in/you" },
+    { "label": "Portfolio", "url": "example.com" }
+  ],
+  "summary": "Software developer with a few years of experience building and maintaining web applications. Comfortable across the stack, with the strongest depth on the backend. Looking for backend and full stack roles.",
+  "skills": [
+    "Python",
+    "TypeScript",
+    "React",
+    "FastAPI",
+    "PostgreSQL",
+    "Docker",
+    "Git",
+    "REST APIs"
+  ],
+  "experience": [
+    {
+      "company": "Acme Software",
+      "role": "Backend Developer",
+      "start": "2022-03",
+      "end": "Present",
+      "bullets": [
+        "Built and maintained REST APIs in Python and FastAPI serving thousands of daily requests",
+        "Reduced average query time by 40 percent by adding indexes and rewriting slow ORM queries",
+        "Wrote pytest suites that brought CI coverage from 45 to 82 percent"
+      ]
+    },
+    {
+      "company": "StartupXYZ",
+      "role": "Full Stack Developer",
+      "start": "2020-06",
+      "end": "2022-02",
+      "bullets": [
+        "Delivered a React and TypeScript customer dashboard used daily by the support team",
+        "Set up CI pipelines and Docker-based local development for a team of five"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "school": "State University",
+      "degree": "BS Computer Science",
+      "year": "2020"
+    }
+  ],
+  "projects": [
+    {
+      "name": "TrackAJob",
+      "description": "Application tracker and resume tailoring tool built with FastAPI and React",
+      "url": "github.com/you/trackajob"
+    }
+  ]
+}

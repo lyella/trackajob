@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.vite/
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+.env
+*.db
+.vercel/
+.DS_Store
+web/tsconfig.tsbuildinfo
