@@ -12,3 +12,10 @@ __pycache__/
 .vercel/
 .DS_Store
 web/tsconfig.tsbuildinfo
+.neon
+.env.local
+.env.*
+.neon/
+
+.vercel
+.env*

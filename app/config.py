@@ -17,7 +17,10 @@ def _default_database_url() -> str:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Real environment variables always beat these files, so Vercel's
+    # DATABASE_URL wins in production. Locally .env is manual overrides and
+    # .env.local holds what the Neon CLI writes (last file wins).
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # In production set DATABASE_URL to the Neon connection string.
     database_url: str = Field(default_factory=_default_database_url)
