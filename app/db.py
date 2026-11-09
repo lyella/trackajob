@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import get_settings
@@ -14,10 +15,20 @@ _engine = None
 _session_factory = None
 
 
+def normalize_url(url: str) -> str:
+    """Neon gives postgresql:// connection strings. SQLAlchemy needs the
+    psycopg (v3) driver named explicitly, while psycopg2 is not installed."""
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    return url
+
+
 def get_engine():
     global _engine
     if _engine is None:
-        url = get_settings().database_url
+        url = normalize_url(get_settings().database_url)
         if url.startswith("sqlite"):
             # SQLite needs check_same_thread=False for FastAPI's threadpool.
             _engine = create_engine(url, connect_args={"check_same_thread": False})
