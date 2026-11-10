@@ -87,6 +87,12 @@ export function ResumeEditor({
         <span>
           version {detail.version} — autosave: {status}
         </span>
+        <a className="export-btn" href={`/api/resumes/${detail.id}/export/pdf`}>
+          Export PDF
+        </a>
+        <a className="export-btn" href={`/api/resumes/${detail.id}/export/docx`}>
+          Export DOCX
+        </a>
         <button onClick={saveNewVersion} disabled={status === 'saving'}>
           Save as new version
         </button>

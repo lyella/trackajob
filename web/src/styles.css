@@ -207,3 +207,17 @@ button.primary:hover:not(:disabled) { background: #1d557a; }
 .job-desc pre { white-space: pre-wrap; font-size: 0.8rem; color: #333; max-height: 12rem; overflow: auto; margin: 0.4rem 0; }
 .job-notes { width: 100%; margin-top: 0.4rem; box-sizing: border-box; }
 .job-history { margin-top: 0.4rem; }
+
+.export-btn {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid #b9c4ce;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.export-btn:hover { background: #eef3f7; }
