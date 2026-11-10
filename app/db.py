@@ -70,6 +70,22 @@ def get_session_factory() -> sessionmaker:
     return _session_factory
 
 
+def ensure_schema_upgrades():
+    """create_all() never adds columns to existing tables. This is a
+    minimal, idempotent column-level migration for the SQLite family
+    (local file and Turso). Honest note: this stops scaling at the next
+    nontrivial change; Alembic should replace it before then."""
+    import sqlalchemy as sa
+
+    engine = get_engine()
+    if not engine.url.get_backend_name().startswith("sqlite"):
+        return  # future migrations handle other backends
+    with engine.begin() as conn:
+        existing = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(jobs)"))}
+        if existing and "resume_version_id" not in existing:
+            conn.execute(sa.text("ALTER TABLE jobs ADD COLUMN resume_version_id INTEGER"))
+
+
 def get_db() -> Iterator[Session]:
     db = get_session_factory()()
     try:

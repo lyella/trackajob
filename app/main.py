@@ -15,7 +15,10 @@ async def lifespan(app: FastAPI):
     # ever become real (see ADR-0007).
     import app.models  # noqa: F401  (registers tables on Base)
 
+    from app.db import ensure_schema_upgrades
+
     Base.metadata.create_all(get_engine())
+    ensure_schema_upgrades()
     yield
 
 
