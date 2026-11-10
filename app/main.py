@@ -1,19 +1,33 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-from app.routes import health
+from app.db import Base, get_engine
+from app.routes import auth, health, resumes
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Idempotent schema creation. Fine at this scale; revisit if migrations
+    # ever become real (see ADR-0007).
+    import app.models  # noqa: F401  (registers tables on Base)
+
+    Base.metadata.create_all(get_engine())
+    yield
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    application = FastAPI(title=settings.app_name, debug=settings.debug)
+    application = FastAPI(title=settings.app_name, debug=settings.debug, lifespan=lifespan)
 
     # API routes are registered first. With app.frontend() they always take
     # priority over frontend files regardless of registration order.
     application.include_router(health.router)
+    application.include_router(auth.router)
+    application.include_router(resumes.router)
 
     # Serve the built frontend (web/dist) from the same function, so the
     # app runs on one domain with no CORS setup. Vercel promotes these files

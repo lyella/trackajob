@@ -3,7 +3,7 @@ import os
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,15 @@ class Settings(BaseSettings):
 
     # In production set DATABASE_URL to the database connection string.
     database_url: str = Field(default_factory=_default_database_url)
+    # An empty value in an env file (e.g. the template line in .env.example)
+    # must mean "not set", not "parse an empty URL and crash".
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def _empty_url_means_default(cls, value):
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            return _default_database_url()
+        return value
+
     # Turso remote connections need the database auth token separately.
     turso_auth_token: str = ""
 

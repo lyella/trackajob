@@ -1,0 +1,65 @@
+{
+  "name": "Your Name",
+  "email": "you@example.com",
+  "phone": "+1 555 000 0000",
+  "location": "Your City",
+  "links": [
+    {
+      "label": "LinkedIn",
+      "url": "linkedin.com/in/you"
+    },
+    {
+      "label": "Portfolio",
+      "url": "example.com"
+    }
+  ],
+  "summary": "Backend developer with experience building and maintaining Python services and REST APIs. Proficient in PostgreSQL query optimization and CI/CD workflows. Seeking a role in payments infrastructure where reliability and scalability are critical.",
+  "skills": [
+    "Python",
+    "TypeScript",
+    "React",
+    "FastAPI",
+    "PostgreSQL",
+    "Docker",
+    "Git",
+    "REST APIs",
+    "CI/CD"
+  ],
+  "experience": [
+    {
+      "company": "Acme Software",
+      "role": "Backend Developer",
+      "start": "2022-03",
+      "end": "Present",
+      "bullets": [
+        "Built and maintained REST APIs in Python and FastAPI serving thousands of daily requests",
+        "Reduced average query time by 40 percent by adding indexes and rewriting slow ORM queries",
+        "Wrote pytest suites that brought CI coverage from 45 to 82 percent"
+      ]
+    },
+    {
+      "company": "StartupXYZ",
+      "role": "Full Stack Developer",
+      "start": "2020-06",
+      "end": "2022-02",
+      "bullets": [
+        "Set up CI pipelines and Docker-based local development for a team of five"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "school": "State University",
+      "degree": "BS Computer Science",
+      "year": "2020"
+    }
+  ],
+  "projects": [
+    {
+      "name": "TrackAJob",
+      "description": "Application tracker and resume tailoring tool built with FastAPI and React",
+      "url": "github.com/you/trackajob"
+    }
+  ],
+  "tailor_notes": "Emphasized backend experience, PostgreSQL optimization, and CI/CD. Removed bullets unrelated to payments or backend infrastructure. Did not add experience with fintech, Kubernetes, or event-driven architectures as they were not present in the base resume."
+}
