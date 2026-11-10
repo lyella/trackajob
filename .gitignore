@@ -25,3 +25,4 @@ web/tsconfig.tsbuildinfo
 /*.raw.json
 /m1_*
 /test.json
+/out.json
