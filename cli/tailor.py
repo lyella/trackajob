@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import sys
 import time
@@ -53,15 +54,27 @@ the user. You return the tailored resume as JSON with the same schema and
 field names. Never add, remove, or rename fields.
 
 Hard rules:
-- Never invent employers, job titles, dates, degrees, certifications, or
-  numbers. Rewrite and reorder what is there; fabricate nothing.
+- Never invent employers, job titles, dates, degrees, certifications, achievements,
+  technologies, or numbers. Rewrite and reorder what is there; fabricate nothing.
+- Every bullet in the output must be a rephrased version of a bullet that exists
+  in the base resume. Do not delete an existing achievement to make room for a
+  better-sounding one, and do not add bullets whose substance is not in the base
+  resume. If a job requirement has no support in the resume, leave it out: it is
+  fine for the tailored resume to not mention it.
+- Do not import vocabulary from the job description into a bullet unless the
+  base resume already uses those words. Rephrasing selects and orders words the
+  base resume contains; it never re-scopes what the work was about. A bullet
+  about serving API traffic must not become a bullet about processing payments
+  just because the job post mentions payments.
 - Keep the wording plain and factual. No first person pronouns.
+- Keep every bullet from the base resume, rephrased where useful. Merge bullets
+  only when they describe the same work. Cut a bullet only when the user's
+  instruction explicitly asks for a shorter or one-page resume.
 - Shift emphasis toward what the job description asks for, using only real
   content from the resume.
-- Honor the user's instruction (for example "shorten to one page" or
-  "emphasize project work"). If an instruction would require lying or
+- Honor the user's instruction (for example "emphasize project work" or
+  "shorten to one page"). If an instruction would require lying or
   inventing facts, ignore it and note that in "tailor_notes".
-- One to two bullets per experience entry unless the instruction says fewer.
 - "summary" is at most four sentences, aligned with the job description.
 - Output must be a single JSON object, no markdown fences, no commentary
   outside the JSON. The schema also has an optional field "tailor_notes" for
@@ -155,13 +168,71 @@ def extract_json(content: str) -> dict:
     return json.loads(content)
 
 
-def validate(tailored: dict) -> None:
+def _token_support(new_bullet: str, base_bullets: list[str]) -> bool:
+    """Heuristic check that a tailored bullet has support in the base resume:
+    shares a number, or at least two significant words, with some base bullet."""
+    def tokens(s: str) -> set:
+        return {w for w in re.findall(r"[a-zA-Z]{4,}|\d+", s.lower())}
+    def numbers(s: str) -> set:
+        return {n for n in re.findall(r"\d+", s)}
+    for base in base_bullets:
+        if numbers(new_bullet) & numbers(base):
+            return True
+        if len(tokens(new_bullet) & tokens(base)) >= 2:
+            return True
+    return False
+
+
+def _job_vocabulary_graft(new_bullets: list[str], base_bullets: list[str], job_text: str, base_resume: dict | None = None) -> list[str]:
+    """Flags words that appear in a tailored bullet AND the job description but
+    not anywhere in the base resume. Vocabulary the candidate never used,
+    appearing only because the job post uses it, is the signature of the model
+    re-scoping their experience."""
+    def words(s: str) -> set:
+        return {w for w in re.findall(r"[a-zA-Z]{4,}", s.lower())}
+    job_words = words(job_text)
+    base_words = {w for b in base_bullets for w in words(b)}
+    if base_resume:
+        for skill in base_resume.get("skills", []):
+            base_words |= words(skill)
+        for entry in base_resume.get("experience", []):
+            base_words |= words(entry.get("role", ""))
+        base_words |= words(base_resume.get("summary", ""))
+    flagged = []
+    for b in new_bullets:
+        grafted = {w for w in words(b) if w in job_words and w not in base_words}
+        if grafted:
+            flagged.append(f"{b}  [grafted: {', '.join(sorted(grafted))}]")
+    return flagged
+
+
+def validate(tailored: dict, base: dict | None = None, job_text: str = "") -> list[str]:
+    """Returns a list of problems; also prints warnings a tailor run should see.
+    Hard failure (exception) only when the model broke the resume schema."""
+    problems = []
     missing = [f for f in RESUME_FIELDS if f not in tailored]
     if missing:
         raise ValueError(f"model output is missing fields: {missing}")
     for job in tailored.get("experience", []):
         if not job.get("bullets"):
             raise ValueError(f"experience entry without bullets: {job}")
+    if base:
+        for base_job, new_job in zip(base.get("experience", []), tailored.get("experience", [])):
+            base_bullets = base_job.get("bullets", [])
+            new_bullets = new_job.get("bullets", [])
+            unsupported = [b for b in new_bullets if not _token_support(b, base_bullets)]
+            for b in unsupported:
+                print(f"WARNING: bullet may be fabricated, no support in base resume:\n  - {b}")
+                problems.append("unsupported bullet")
+            for line in _job_vocabulary_graft(new_bullets, base_bullets, job_text, base_resume=base):
+                print(f"WARNING: bullet uses job-post vocabulary the resume never used:\n  - {line}")
+                problems.append("grafted vocabulary")
+            if len(new_bullets) < len(base_bullets):
+                print(f"WARNING: {base_job.get('company', '?')} dropped achievement bullets "
+                      f"({len(base_bullets)} -> {len(new_bullets)}). If you did not ask for "
+                      f"a shorter resume, the model cut real content.")
+                problems.append("bullets dropped")
+    return problems
 
 
 def summary_of_changes(base: dict, tailored: dict) -> str:
@@ -261,13 +332,34 @@ def main() -> None:
 
     print(f"Calling {settings['model']} at {settings['base_url']} ...")
     tailored, info = call_llm(settings, resume, job, args.prompt)
+    raw_tailored = tailored
 
     try:
-        validate(tailored)
+        problems = validate(tailored, base=resume, job_text=job)
     except ValueError as exc:
         print(f"Model returned invalid output: {exc}")
         print(json.dumps(tailored, indent=2, ensure_ascii=False))
         sys.exit(3)
+    if problems:
+        print("\nConsider rerunning: the model output drew scrutiny (see warnings above).")
+
+    # Deterministic defense: strip bullets with no support in the base resume
+    # from the final output. The model's unfiltered output is kept next to the
+    # result so a human can review what was cut.
+    removed = []
+    for base_job, new_job in zip(resume.get("experience", []), tailored.get("experience", [])):
+        base_bullets = base_job.get("bullets", [])
+        kept = [b for b in new_job["bullets"] if _token_support(b, base_bullets)]
+        for b in new_job["bullets"]:
+            if b not in kept:
+                removed.append(f"{base_job.get('company', '?')}: {b}")
+        new_job["bullets"] = kept or list(base_bullets)  # never emit an empty entry
+    if removed:
+        raw_path = Path(f"{args.out}.raw.json")
+        raw_path.write_text(json.dumps(raw_tailored, indent=2, ensure_ascii=False), encoding="utf-8")
+        for r in removed:
+            print(f"REMOVED unsupported bullet: {r}")
+        print(f"Unfiltered model output kept for review: {raw_path}")
 
     out_json = Path(f"{args.out}.json")
     out_pdf = Path(f"{args.out}.pdf")

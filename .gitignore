@@ -19,3 +19,7 @@ web/tsconfig.tsbuildinfo
 
 .vercel
 .env*
+
+# tailor run outputs at the repo root
+/*.pdf
+/*.raw.json
