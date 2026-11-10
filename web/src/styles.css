@@ -1,46 +1,123 @@
 :root {
   color-scheme: light;
-  font-family: system-ui, sans-serif;
+  font-family: 'Lato', system-ui, sans-serif;
+  --ink: #1c2733;
+  --muted: #5b6b7a;
+  --accent: #17435e;
+  --error: #b3261e;
 }
 
 body {
   margin: 0;
-  color: #1a1a1a;
+  color: var(--ink);
+  background: #f6f8fa;
 }
+
+h1, h2, h3 {
+  font-family: 'Montserrat', 'Lato', system-ui, sans-serif;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+h1 { font-size: 1.9rem; margin: 0 0 0.3rem; }
+h2 { font-size: 1.15rem; margin: 1.6rem 0 0.5rem; }
+h3 { margin: 1.4rem 0 0.4rem; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.07em; }
 
 main {
-  max-width: 40rem;
+  max-width: 42rem;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 2.5rem 1.5rem;
 }
 
-h1 { font-size: 1.8rem; }
-h2 { font-size: 1.1rem; }
-h3 { margin: 1.2rem 0 0.4rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.muted { color: var(--muted); }
+.notice { color: #1b5e20; }
+.link { background: none; border: none; color: var(--accent); text-decoration: underline; padding: 0; }
 
-button { cursor: pointer; }
-input, textarea { font: inherit; padding: 0.25rem 0.4rem; }
-label { display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; }
+input, textarea {
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #b9c4ce;
+  border-radius: 6px;
+  background: #fff;
+}
+
+input:focus, textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+
+form label {
+  display: block;
+  margin: 0.8rem 0;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+form label input { display: block; width: 100%; margin-top: 0.3rem; font-weight: 400; }
+
+.hint { display: block; margin-top: 0.25rem; color: var(--muted); font-size: 0.8rem; }
+
+button {
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid #b9c4ce;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+button:hover:not(:disabled) { background: #eef3f7; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) { background: #1d557a; }
+
+.actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
+
+.form-error {
+  color: var(--error);
+  background: #fdecea;
+  border: 1px solid #f5c6c2;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+
+.resume-list { padding-left: 1.1rem; }
+.resume-list a { color: var(--accent); font-weight: 600; }
 
 .row { display: flex; gap: 0.4rem; align-items: center; margin: 0.25rem 0; }
 .row input { flex: 1; min-width: 4rem; }
 
 .entry {
-  border: 1px solid #ddd;
-  padding: 0.6rem;
-  margin: 0.5rem 0;
-  border-radius: 4px;
+  border: 1px solid #cdd7df;
+  background: #fff;
+  padding: 0.7rem;
+  margin: 0.6rem 0;
+  border-radius: 6px;
 }
 
 .editor-bar {
   position: sticky;
   top: 0;
-  background: #fafafa;
-  border-bottom: 1px solid #ddd;
-  padding: 0.5rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid #cdd7df;
+  padding: 0.6rem 1.2rem;
   display: flex;
   gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .editor-panels {
@@ -53,24 +130,22 @@ label { display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; }
 
 .editor-form { flex: 1; min-width: 22rem; max-width: 34rem; }
 
-/* Resume preview: one column, plain fonts, no graphics. This is the
-   ATS-safe template; export (M4) renders the same structure. */
+/* The resume preview keeps standard, universally parseable fonts on purpose:
+   it mirrors what the PDF export renders (M4). Editor chrome uses Lato and
+   Montserrat; the resume itself stays conservative for ATS fidelity. */
 .rt-page {
   background: #fff;
-  border: 1px solid #ccc;
+  border: 1px solid #cdd7df;
   padding: 2.2rem 2.4rem;
   max-width: 30rem;
   min-height: 42rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 .rt-page h1 { margin: 0 0 0.3rem; font-size: 1.5rem; }
 
-.rt-contact {
-  margin: 0.15rem 0;
-  font-size: 0.85rem;
-  color: #333;
-}
+.rt-contact { margin: 0.15rem 0; font-size: 0.85rem; color: #333; }
 
 .rt-section h2 {
   margin: 0.9rem 0 0.2rem;
@@ -78,12 +153,7 @@ label { display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; }
   letter-spacing: 0.08em;
 }
 
-.rt-section hr {
-  border: none;
-  border-top: 1px solid #555;
-  margin: 0 0 0.4rem;
-}
-
+.rt-section hr { border: none; border-top: 1px solid #555; margin: 0 0 0.4rem; }
 .rt-entry { margin: 0.5rem 0; }
 .rt-dates { color: #444; font-size: 0.85rem; }
 .rt-entry ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }

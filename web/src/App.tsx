@@ -2,13 +2,30 @@ import { useEffect, useState } from 'react'
 import { api, ResumeOut, User } from './types'
 import { createStarterResume, ResumeEditor } from './ResumeEditor'
 
+function humanizeError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  const detail = raw.replace(/^Error:\s*/, '')
+  if (detail.includes('at least 8 characters'))
+    return 'Password must be at least 8 characters.'
+  if (detail.includes('valid email address') || detail.includes('value is not a valid email'))
+    return 'That email address does not look right.'
+  if (detail.includes('already registered'))
+    return 'That email is already registered. Try logging in.'
+  if (detail.includes('invalid email or password'))
+    return 'Email or password is incorrect.'
+  return detail
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
   const [resumes, setResumes] = useState<ResumeOut[]>([])
   const [editing, setEditing] = useState<ResumeOut | null>(null)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     api<User>('/api/auth/me')
@@ -18,6 +35,7 @@ export default function App() {
       })
       .then(setResumes)
       .catch(() => setUser(null))
+      .finally(() => setAuthChecked(true))
   }, [])
 
   async function refresh() {
@@ -25,42 +43,91 @@ export default function App() {
   }
 
   async function submit(mode: 'login' | 'signup') {
+    setBusy(true)
+    setError('')
     try {
-      setUser(await api<User>(`/api/auth/${mode}`, {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      }))
+      setUser(
+        await api<User>(`/api/auth/${mode}`, {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        })
+      )
       await refresh()
-      setMessage('')
+      setNotice('')
     } catch (e) {
-      setMessage(String(e))
+      setError(humanizeError(e))
+    } finally {
+      setBusy(false)
     }
   }
 
   async function logout() {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {})
     setUser(null)
+    setEditing(null)
+  }
+
+  if (!authChecked) {
+    return (
+      <main>
+        <p className="muted">Loading…</p>
+      </main>
+    )
   }
 
   if (!user) {
+    const canLogin = email.trim().length > 3 && password.length > 0
+    const canSignup = canLogin && password.length >= 8
     return (
       <main>
         <h1>TrackAJob</h1>
-        <p>Track your applications. Tailor your resume to every job post.</p>
-        <form onSubmit={(e) => e.preventDefault()}>
-          <input type="email" placeholder="email" value={email} onChange={(e) => setEmail(e.target.value)} />{' '}
-          <input
-            type="password"
-            placeholder="password (8+ chars)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+        <p className="muted">Track your applications. Tailor your resume to every job post.</p>
+        <form onSubmit={(e) => e.preventDefault()} noValidate>
+          <label>
+            Email
+            <input
+              type="email"
+              autoFocus
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder="at least 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {password.length > 0 && password.length < 8 && (
+              <small className="hint">
+                For sign up, use at least 8 characters ({8 - password.length} to go).
+              </small>
+            )}
+          </label>
+          <div className="actions">
+            <button
+              type="submit"
+              disabled={busy || !canLogin}
+              onClick={() => submit('login')}
+            >
+              {busy ? 'Checking…' : 'Log in'}
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={busy || !canSignup}
+              onClick={() => submit('signup')}
+            >
+              {busy ? 'Checking…' : 'Sign up'}
+            </button>
+          </div>
         </form>
-        <p>
-          <button onClick={() => submit('login')}>Log in</button>{' '}
-          <button onClick={() => submit('signup')}>Sign up</button>
-        </p>
-        {message && <p style={{ color: '#a33' }}>{message}</p>}
+        {error && <p className="form-error" role="alert">{error}</p>}
       </main>
     )
   }
@@ -80,12 +147,13 @@ export default function App() {
   return (
     <main>
       <h1>TrackAJob</h1>
-      <p>
-        Signed in as {user.email}. <button onClick={logout}>Log out</button>
+      <p className="muted">
+        Signed in as {user.email}. <button className="link" onClick={logout}>Log out</button>
       </p>
+      {notice && <p className="notice">{notice}</p>}
       <h2>Resumes</h2>
-      {resumes.length === 0 && <p>No resumes yet.</p>}
-      <ul>
+      {resumes.length === 0 && <p className="muted">No resumes yet. Create your first one.</p>}
+      <ul className="resume-list">
         {resumes.map((r) => (
           <li key={r.id}>
             <a
@@ -97,18 +165,29 @@ export default function App() {
             >
               {r.name}
             </a>{' '}
-            (version {r.latest_version})
+            <small className="muted">(version {r.latest_version})</small>
           </li>
         ))}
       </ul>
       <button
+        className="primary"
+        disabled={busy}
         onClick={async () => {
-          const r = await createStarterResume(`Resume ${resumes.length + 1}`)
-          setEditing(r)
+          setBusy(true)
+          setError('')
+          try {
+            const r = await createStarterResume(`Resume ${resumes.length + 1}`)
+            setEditing(r)
+          } catch (e) {
+            setError(humanizeError(e))
+          } finally {
+            setBusy(false)
+          }
         }}
       >
-        New resume
+        {busy ? 'Creating…' : 'New resume'}
       </button>
+      {error && <p className="form-error" role="alert">{error}</p>}
     </main>
   )
 }
