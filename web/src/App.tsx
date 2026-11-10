@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, ResumeOut, User } from './types'
 import { createStarterResume, ResumeEditor } from './ResumeEditor'
+import { JobsPanel } from './JobsPanel'
 
 function humanizeError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e)
@@ -21,6 +22,7 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [resumes, setResumes] = useState<ResumeOut[]>([])
   const [editing, setEditing] = useState<ResumeOut | null>(null)
+  const [tab, setTab] = useState<'resumes' | 'jobs'>('resumes')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -151,43 +153,59 @@ export default function App() {
         Signed in as {user.email}. <button className="link" onClick={logout}>Log out</button>
       </p>
       {notice && <p className="notice">{notice}</p>}
-      <h2>Resumes</h2>
-      {resumes.length === 0 && <p className="muted">No resumes yet. Create your first one.</p>}
-      <ul className="resume-list">
-        {resumes.map((r) => (
-          <li key={r.id}>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault()
+
+      <nav className="tabs">
+        <button className={tab === 'resumes' ? 'primary tab' : 'tab'} onClick={() => setTab('resumes')}>
+          Resumes
+        </button>
+        <button className={tab === 'jobs' ? 'primary tab' : 'tab'} onClick={() => setTab('jobs')}>
+          Applications
+        </button>
+      </nav>
+
+      {tab === 'jobs' ? (
+        <JobsPanel />
+      ) : (
+        <>
+          <h2>Resumes</h2>
+          {resumes.length === 0 && <p className="muted">No resumes yet. Create your first one.</p>}
+          <ul className="resume-list">
+            {resumes.map((r) => (
+              <li key={r.id}>
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setEditing(r)
+                  }}
+                >
+                  {r.name}
+                </a>{' '}
+                <small className="muted">(version {r.latest_version})</small>
+              </li>
+            ))}
+          </ul>
+          <button
+            className="primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              setError('')
+              try {
+                const r = await createStarterResume(`Resume ${resumes.length + 1}`)
                 setEditing(r)
-              }}
-            >
-              {r.name}
-            </a>{' '}
-            <small className="muted">(version {r.latest_version})</small>
-          </li>
-        ))}
-      </ul>
-      <button
-        className="primary"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true)
-          setError('')
-          try {
-            const r = await createStarterResume(`Resume ${resumes.length + 1}`)
-            setEditing(r)
-          } catch (e) {
-            setError(humanizeError(e))
-          } finally {
-            setBusy(false)
-          }
-        }}
-      >
-        {busy ? 'Creating…' : 'New resume'}
-      </button>
-      {error && <p className="form-error" role="alert">{error}</p>}
+              } catch (e) {
+                setError(humanizeError(e))
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {busy ? 'Creating…' : 'New resume'}
+          </button>
+          {error && <p className="form-error" role="alert">{error}</p>}
+        </>
+      )}
     </main>
   )
 }

@@ -1,7 +1,9 @@
 """Request/response schemas. The resume content schema mirrors the one the
 tailoring CLI uses, so the same JSON shape flows through the whole system."""
 
-from pydantic import BaseModel, EmailStr, Field
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class SignupIn(BaseModel):
@@ -74,3 +76,49 @@ class ResumeOut(BaseModel):
     name: str
     latest_version: int
     versions: list[ResumeVersionMeta] = Field(default_factory=list)
+
+
+# Job tracker statuses, from PRD FR-7. Typo'd or invalid statuses are
+# rejected at the schema layer rather than corrected.
+JOB_STATUSES = Literal["interested", "applied", "interview", "offer", "rejected", "closed"]
+
+
+class JobStatusEntry(BaseModel):
+    status: str
+    at: str
+
+
+class JobCreate(BaseModel):
+    # Strict: a typo like "statu" must not be silently dropped.
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=200)
+    company: str = Field(default="", max_length=150)
+    source: str = Field(default="", max_length=80)
+    url: str = Field(default="", max_length=500)
+    description: str = Field(default="", max_length=50000)
+    notes: str = Field(default="", max_length=10000)
+
+
+class JobUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    company: str | None = Field(default=None, max_length=150)
+    source: str | None = Field(default=None, max_length=80)
+    url: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=50000)
+    status: JOB_STATUSES | None = None
+    notes: str | None = Field(default=None, max_length=10000)
+
+
+class JobOut(BaseModel):
+    id: int
+    title: str
+    company: str
+    source: str
+    url: str
+    description: str
+    status: str
+    notes: str
+    status_history: list[JobStatusEntry] = Field(default_factory=list)
+    created_at: str
+    updated_at: str

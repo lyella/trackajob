@@ -50,3 +50,23 @@ class ResumeVersion(Base):
     # scale. See ADR-0007.
     content: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class JobPost(Base):
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    company: Mapped[str] = mapped_column(String(150), default="")
+    source: Mapped[str] = mapped_column(String(80), default="")
+    url: Mapped[str] = mapped_column(String(500), default="")
+    # The pasted job description text; manual paste is the only ingestion
+    # path in v1 (ADR-0002).
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(20), default="interested")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    # JSON array of {"status": str, "at": iso} entries, appended on change.
+    status_history: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

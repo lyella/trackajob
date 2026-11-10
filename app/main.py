@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.db import Base, get_engine
-from app.routes import auth, health, resumes
+from app.routes import auth, health, jobs, resumes
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ def create_app() -> FastAPI:
     application.include_router(health.router)
     application.include_router(auth.router)
     application.include_router(resumes.router)
+    application.include_router(jobs.router)
 
     # Serve the built frontend (web/dist) from the same function, so the
     # app runs on one domain with no CORS setup. Vercel promotes these files
