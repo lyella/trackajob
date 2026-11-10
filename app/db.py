@@ -26,14 +26,20 @@ def normalize_url(url: str) -> str:
 
 
 def _create_remote_engine(url: str):
-    """Turso (libsql) remote connection. Pattern from the sqlalchemy-libsql
-    README: dialect sqlite+libsql, URL and auth token passed separately.
-    The dialect package only ships for Linux and macOS, which is fine here:
+    """Turso (libsql) remote connection via the sqlalchemy-libsql dialect.
+
+    The dialect (v0.2.0) rebuilds a https URL from the parsed engine URL's
+    host and path (libsql.py: _build_connection_url), so the scheme from the
+    Turso connection string must be stripped here. Passing the raw
+    libsql:// URL into the engine string makes SQLAlchemy parse an empty
+    port and crash; verified against the deployed function's error.
+    The dialect package only ships for Linux and macOS, which is fine:
     local development runs on a plain SQLite file, only the deployed Vercel
     function (Linux) uses this path."""
     from app.config import get_settings
 
-    engine_url = f"sqlite+libsql://{url}?secure=true"
+    host_part = url.split("://", 1)[-1]
+    engine_url = f"sqlite+libsql://{host_part}?secure=true"
     return create_engine(
         engine_url,
         connect_args={"auth_token": get_settings().turso_auth_token},
