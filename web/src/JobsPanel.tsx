@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api } from './types'
+import { api, ResumeContent, ResumeOut } from './types'
+import { DiffView } from './DiffView'
 
 export const STATUSES = ['interested', 'applied', 'interview', 'offer', 'rejected', 'closed'] as const
 export type JobStatus = (typeof STATUSES)[number]
@@ -15,11 +16,27 @@ export type Job = {
   status: JobStatus
   notes: string
   status_history: JobStatusEntry[]
+  resume_version_id: number | null
+  sent_resume: string | null
   created_at: string
   updated_at: string
 }
 
 const emptyForm = { title: '', company: '', source: '', url: '', description: '', notes: '' }
+
+type TailorResponse = {
+  resume_id: number
+  base_version: number
+  base_content: ResumeContent
+  version: number
+  version_id: number
+  content: ResumeContent
+  warnings: string[]
+  notes: string
+  tokens_in: number
+  tokens_out: number
+  cost_usd: number
+}
 
 export function JobsPanel() {
   const [jobs, setJobs] = useState<Job[] | null>(null)
@@ -27,12 +44,53 @@ export function JobsPanel() {
   const [form, setForm] = useState(emptyForm)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
+  const [resumes, setResumes] = useState<ResumeOut[]>([])
+  const [tailorJobId, setTailorJobId] = useState<number | null>(null)
+  const [tailorResumeId, setTailorResumeId] = useState<number | null>(null)
+  const [prompt, setPrompt] = useState('')
+  const [tailoring, setTailoring] = useState(false)
+  const [tailorResult, setTailorResult] = useState<TailorResponse | null>(null)
 
   useEffect(() => {
     api<Job[]>('/api/jobs')
       .then(setJobs)
       .catch((e) => setError(String(e)))
+    api<ResumeOut[]>('/api/resumes')
+      .then((rs) => {
+        setResumes(rs)
+        if (rs.length > 0) setTailorResumeId(rs[0].id)
+      })
+      .catch(() => {})
   }, [])
+
+  async function runTailor(jobId: number) {
+    if (tailorResumeId == null) return
+    setTailoring(true)
+    setError('')
+    setTailorResult(null)
+    try {
+      const r = await api<TailorResponse>(`/api/resumes/${tailorResumeId}/tailor`, {
+        method: 'POST',
+        body: JSON.stringify({ job_id: jobId, prompt }),
+      })
+      setTailorResult(r)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setTailoring(false)
+    }
+  }
+
+  async function markAppliedWith(job: Job, versionId: number, version: number) {
+    const updated = await api<Job>(`/api/jobs/${job.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'applied', resume_version_id: versionId }),
+    })
+    setJobs((js) => js!.map((j) => (j.id === job.id ? updated : j)))
+    setTailorJobId(null)
+    setTailorResult(null)
+    void version
+  }
 
   async function addJob() {
     if (!form.title.trim()) {
@@ -161,7 +219,69 @@ export function JobsPanel() {
             <button className="link" onClick={() => remove(j.id)}>
               delete
             </button>
+            <button className="link" onClick={() => { setTailorResult(null); setTailorJobId(tailorJobId === j.id ? null : j.id) }}>
+              tailor
+            </button>
           </div>
+          {j.sent_resume && <p className="sent-resume">sent with: {j.sent_resume}</p>}
+          {tailorJobId === j.id && (
+            <div className="tailor-panel">
+              <select
+                value={tailorResumeId ?? ''}
+                onChange={(e) => setTailorResumeId(Number(e.target.value))}
+              >
+                {resumes.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>{' '}
+              <input
+                placeholder="optional instruction, e.g. emphasize backend work"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+              />{' '}
+              <button className="primary" disabled={tailoring || !tailorResumeId} onClick={() => runTailor(j.id)}>
+                {tailoring ? 'Tailoring…' : 'Tailor resume'}
+              </button>
+              {tailorResult && (
+                <div className="tailor-result">
+                  <p className="muted">
+                    v{tailorResult.base_version} â†’ v{tailorResult.version}, {tailorResult.tokens_in}/{tailorResult.tokens_out} tokens, ${tailorResult.cost_usd.toFixed(4)}
+                  </p>
+                  {tailorResult.notes && <p className="notice">{tailorResult.notes}</p>}
+                  {tailorResult.warnings.map((w, i) => (
+                    <p key={i} className="form-error">{w}</p>
+                  ))}
+                  <DiffView before={tailorResult.base_content} after={tailorResult.content} />
+                  <div className="actions">
+                    <a className="export-btn" href={`/api/resumes/${tailorResult.resume_id}/export/pdf`}>
+                      Export PDF
+                    </a>{' '}
+                    <a className="export-btn" href={`/api/resumes/${tailorResult.resume_id}/export/docx`}>
+                      Export DOCX
+                    </a>{' '}
+                    <button
+                      onClick={() => markAppliedWith(j, tailorResult.version_id, tailorResult.version)}
+                    >
+                      Mark applied with v{tailorResult.version}
+                    </button>{' '}
+                    <button
+                      onClick={async () => {
+                        await api(`/api/resumes/${tailorResult.resume_id}/revert`, {
+                          method: 'POST',
+                          body: JSON.stringify({ version: tailorResult.base_version }),
+                        })
+                        setTailorResult(null)
+                      }}
+                    >
+                      Revert to v{tailorResult.base_version}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {j.url && (
             <a href={j.url} target="_blank" rel="noreferrer" className="job-link">
               {j.url}

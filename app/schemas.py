@@ -108,6 +108,8 @@ class JobUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=50000)
     status: JOB_STATUSES | None = None
     notes: str | None = Field(default=None, max_length=10000)
+    # Which resume version was sent for this application.
+    resume_version_id: int | None = None
 
 
 class JobOut(BaseModel):
@@ -120,5 +122,7 @@ class JobOut(BaseModel):
     status: str
     notes: str
     status_history: list[JobStatusEntry] = Field(default_factory=list)
+    resume_version_id: int | None = None
+    sent_resume: str | None = None
     created_at: str
     updated_at: str

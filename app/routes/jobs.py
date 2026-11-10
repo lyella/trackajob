@@ -10,13 +10,20 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import JobPost, User, utcnow
+from app.models import JobPost, Resume, ResumeVersion, User, utcnow
 from app.schemas import JobCreate, JobOut, JobStatusEntry, JobUpdate
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
-def _job_out(job: JobPost) -> JobOut:
+def _job_out(db: Session, job: JobPost) -> JobOut:
+    sent_resume = None
+    if job.resume_version_id:
+        version = db.get(ResumeVersion, job.resume_version_id)
+        if version is not None:
+            resume = db.get(Resume, version.resume_id)
+            if resume is not None:
+                sent_resume = f"{resume.name} v{version.version}"
     return JobOut(
         id=job.id,
         title=job.title,
@@ -27,6 +34,8 @@ def _job_out(job: JobPost) -> JobOut:
         status=job.status,
         notes=job.notes,
         status_history=[JobStatusEntry(**e) for e in json.loads(job.status_history)],
+        resume_version_id=job.resume_version_id,
+        sent_resume=sent_resume,
         created_at=job.created_at.isoformat(),
         updated_at=job.updated_at.isoformat(),
     )
@@ -58,7 +67,7 @@ def create_job(
     )
     db.add(job)
     db.commit()
-    return _job_out(job)
+    return _job_out(db, job)
 
 
 @router.get("")
@@ -72,7 +81,7 @@ def list_jobs(
     )
     if status is not None:
         query = query.where(JobPost.status == status)
-    return [_job_out(j) for j in db.execute(query).scalars()]
+    return [_job_out(db, j) for j in db.execute(query).scalars()]
 
 
 @router.get("/{job_id}")
@@ -98,11 +107,21 @@ def update_job(
         job.status = data["status"]
     if "notes" in data and data["notes"] is not None:
         job.notes = data["notes"]
+    if "resume_version_id" in data:
+        version_id = data["resume_version_id"]
+        if version_id is None:
+            job.resume_version_id = None
+        else:
+            version = db.get(ResumeVersion, version_id)
+            resume = db.get(Resume, version.resume_id) if version else None
+            if version is None or resume is None or resume.user_id != user.id:
+                raise HTTPException(status_code=422, detail="unknown resume version for this account")
+            job.resume_version_id = version_id
     for field in ("title", "company", "source", "url", "description"):
         if field in data and data[field] is not None:
             setattr(job, field, data[field])
     db.commit()
-    return _job_out(job)
+    return _job_out(db, job)
 
 
 @router.delete("/{job_id}", status_code=204)

@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     # Turso remote connections need the database auth token separately.
     turso_auth_token: str = ""
 
+    # Tailoring LLM (any OpenAI-compatible chat completions API).
+    llm_base_url: str = "https://api.mistral.ai/v1"
+    llm_api_key: str = ""
+    llm_model: str = "mistral-small-latest"
+    llm_price_in: float = 0.10
+    llm_price_out: float = 0.30
+
     app_name: str = "TrackAJob"
     debug: bool = False
 

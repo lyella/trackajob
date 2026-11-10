@@ -68,5 +68,21 @@ class JobPost(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     # JSON array of {"status": str, "at": iso} entries, appended on change.
     status_history: Mapped[str] = mapped_column(Text, default="[]")
+    # Which resume version was sent for this application (M6 linkage).
+    resume_version_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class TailorUsage(Base):
+    """One row per tailoring call: metering set from M1's measured costs."""
+
+    __tablename__ = "tailor_usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
+    # Integer micro-dollars keep the column exact and portable.
+    cost_micro_usd: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
