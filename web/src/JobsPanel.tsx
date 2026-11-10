@@ -24,6 +24,39 @@ export type Job = {
 
 const emptyForm = { title: '', company: '', source: '', url: '', description: '', notes: '' }
 
+/** The bookmarklet reads schema.org JobPosting JSON-LD from whichever job
+ * page the user is viewing, falls back to heading/description heuristics,
+ * and posts one message to this app's origin. It is served for dragging to
+ * the bookmarks bar, which is why it is one long javascript: URL. */
+function BOOKMARKLET(origin: string): string {
+  return `(function(){
+  var on='${origin}';
+  function job(){
+    var t='',c='',d='',u=location.href;
+    var lds=document.querySelectorAll('script[type="application/ld+json"]');
+    for(var i=0;i<lds.length;i++){
+      try{
+        var j=JSON.parse(lds[i].textContent);
+        var arr=Array.isArray(j['@graph'])?j['@graph']:[j];
+        for(var m=0;m<arr.length;m++){
+          var g=arr[m];
+          if(g['@type']==='JobPosting'){
+            return {title:String(g.title||''),company:String((g.hiringOrganization&&(g.hiringOrganization.name||g.hiringOrganization['name']))||''),description:String(g.description||''),url:u};
+          }
+        }
+      }catch(e){}
+    }
+    var h=document.querySelector('h1');
+    t=h?h.innerText.trim():document.title;
+    d=document.querySelector('[class*="description" i],[id*="description" i]');
+    d=d?d.innerText:document.body.innerText;
+    return {title:t,company:c,description:d.slice(0,20000),url:u};
+  }
+  var w=window.open(on+'#importing','_blank');
+  setTimeout(function(){w.postMessage({type:'trackajob-import',job:job()},on);},900);
+})();`
+}
+
 type TailorResponse = {
   resume_id: number
   base_version: number
@@ -50,10 +83,14 @@ export function JobsPanel() {
   const [prompt, setPrompt] = useState('')
   const [tailoring, setTailoring] = useState(false)
   const [tailorResult, setTailorResult] = useState<TailorResponse | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
 
   useEffect(() => {
     api<Job[]>('/api/jobs')
-      .then(setJobs)
+      .then((js) => {
+        setJobs(js)
+        if (js.length === 0) setAddOpen(true)
+      })
       .catch((e) => setError(String(e)))
     api<ResumeOut[]>('/api/resumes')
       .then((rs) => {
@@ -61,6 +98,39 @@ export function JobsPanel() {
         if (rs.length > 0) setTailorResumeId(rs[0].id)
       })
       .catch(() => {})
+  }, [])
+
+  // Bookmarklet handoff: a page on another site opened this tab with the
+  // #importing hash and posts one message with the job data it read from
+  // the page the user was viewing. The hash is the click token: without
+  // it, we ignore messages entirely.
+  useEffect(() => {
+    function receive(ev: MessageEvent) {
+      const data = ev.data as
+        | { type: 'trackajob-import'; job: Record<string, string> }
+        | undefined
+      if (!data || data.type !== 'trackajob-import') return
+      if (window.location.hash !== '#importing') return
+      history.replaceState(null, '', window.location.pathname)
+      const hostname = (() => {
+        try {
+          return new URL(data.job.url || '').hostname.replace(/^www\./, '')
+        } catch {
+          return ''
+        }
+      })()
+      setForm({
+        title: (data.job.title || '').slice(0, 200),
+        company: (data.job.company || '').slice(0, 150),
+        source: (hostname.split('.')[0] || 'paste').slice(0, 80),
+        url: (data.job.url || '').slice(0, 500),
+        description: (data.job.description || '').slice(0, 50000),
+        notes: '',
+      })
+      setAddOpen(true)
+    }
+    window.addEventListener('message', receive)
+    return () => window.removeEventListener('message', receive)
   }, [])
 
   async function runTailor(jobId: number) {
@@ -129,8 +199,20 @@ export function JobsPanel() {
     <div>
       <h2>Applications</h2>
 
-      <details className="add-job" open={jobs?.length === 0}>
+      <details className="add-job" open={addOpen} onToggle={(e) => setAddOpen(e.currentTarget.open)}>
         <summary>Add a job post</summary>
+        <p className="muted hint-bookmarklet">
+          Manually below, or with one click from the job page: drag this to
+          your bookmarks bar, open a job on LinkedIn, Indeed, JobStreet (or any
+          career site), and click it. TrackAJob opens pre-filled.{' '}
+          <a
+            href={`javascript:${encodeURIComponent(BOOKMARKLET(window.location.origin))}`}
+            onClick={(e) => e.preventDefault()}
+            title="Drag me to your bookmarks bar"
+          >
+            [+1] Save to TrackAJob
+          </a>
+        </p>
         <div className="add-form">
           <label>
             Role title
