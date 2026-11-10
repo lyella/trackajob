@@ -23,3 +23,5 @@ web/tsconfig.tsbuildinfo
 # tailor run outputs at the repo root
 /*.pdf
 /*.raw.json
+/m1_*
+/test.json
