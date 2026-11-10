@@ -73,17 +73,22 @@ def get_session_factory() -> sessionmaker:
 def ensure_schema_upgrades():
     """create_all() never adds columns to existing tables. This is a
     minimal, idempotent column-level migration for the SQLite family
-    (local file and Turso). Honest note: this stops scaling at the next
-    nontrivial change; Alembic should replace it before then."""
+    (local file and Turso). Best effort by design: a schema check must
+    never take the whole app down over a cold start. Honest note: this
+    stops scaling at the next nontrivial change; Alembic should replace
+    it before then."""
     import sqlalchemy as sa
 
-    engine = get_engine()
-    if not engine.url.get_backend_name().startswith("sqlite"):
-        return  # future migrations handle other backends
-    with engine.begin() as conn:
-        existing = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(jobs)"))}
-        if existing and "resume_version_id" not in existing:
-            conn.execute(sa.text("ALTER TABLE jobs ADD COLUMN resume_version_id INTEGER"))
+    try:
+        engine = get_engine()
+        if not engine.url.get_backend_name().startswith("sqlite"):
+            return  # future migrations handle other backends
+        with engine.begin() as conn:
+            existing = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(jobs)"))}
+            if existing and "resume_version_id" not in existing:
+                conn.execute(sa.text("ALTER TABLE jobs ADD COLUMN resume_version_id INTEGER"))
+    except Exception as exc:  # noqa: BLE001 - deliberate: boot must survive
+        print(f"WARNING: schema upgrade check failed: {exc}", flush=True)
 
 
 def get_db() -> Iterator[Session]:
