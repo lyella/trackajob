@@ -98,6 +98,27 @@ def list_versions(
     ]
 
 
+@router.put("/{resume_id}/versions/{version}")
+def update_version(
+    resume_id: int,
+    version: int,
+    payload: ResumeContent,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ResumeVersionMeta:
+    """Autosave target. Editing is allowed on the latest version only, in
+    place: version history grows through explicit action (this endpoint's
+    POST sibling, used by users and by the M6 tailor), never through typing."""
+    resume = _owned_resume(db, user, resume_id)
+    versions = _versions(db, resume.id)
+    if not versions or versions[-1].version != version:
+        raise HTTPException(status_code=409, detail="only the latest version can be edited")
+    row = versions[-1]
+    row.content = payload.model_dump_json(exclude_none=True)
+    db.commit()
+    return ResumeVersionMeta(version=row.version, created_at=row.created_at.isoformat())
+
+
 @router.post("/{resume_id}/versions", status_code=201)
 def append_version(
     resume_id: int,

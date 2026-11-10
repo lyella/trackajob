@@ -5,22 +5,85 @@
 
 body {
   margin: 0;
-  display: grid;
-  min-height: 100vh;
-  place-items: center;
   color: #1a1a1a;
 }
 
 main {
-  max-width: 30rem;
+  max-width: 40rem;
+  margin: 0 auto;
   padding: 2rem;
 }
 
-h1 {
-  margin: 0 0 0.5rem;
-  font-size: 2rem;
+h1 { font-size: 1.8rem; }
+h2 { font-size: 1.1rem; }
+h3 { margin: 1.2rem 0 0.4rem; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+button { cursor: pointer; }
+input, textarea { font: inherit; padding: 0.25rem 0.4rem; }
+label { display: inline-block; margin: 0.25rem 0.5rem 0.25rem 0; }
+
+.row { display: flex; gap: 0.4rem; align-items: center; margin: 0.25rem 0; }
+.row input { flex: 1; min-width: 4rem; }
+
+.entry {
+  border: 1px solid #ddd;
+  padding: 0.6rem;
+  margin: 0.5rem 0;
+  border-radius: 4px;
 }
 
-p {
-  color: #444;
+.editor-bar {
+  position: sticky;
+  top: 0;
+  background: #fafafa;
+  border-bottom: 1px solid #ddd;
+  padding: 0.5rem 1rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 }
+
+.editor-panels {
+  display: flex;
+  gap: 2rem;
+  padding: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.editor-form { flex: 1; min-width: 22rem; max-width: 34rem; }
+
+/* Resume preview: one column, plain fonts, no graphics. This is the
+   ATS-safe template; export (M4) renders the same structure. */
+.rt-page {
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 2.2rem 2.4rem;
+  max-width: 30rem;
+  min-height: 42rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.rt-page h1 { margin: 0 0 0.3rem; font-size: 1.5rem; }
+
+.rt-contact {
+  margin: 0.15rem 0;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.rt-section h2 {
+  margin: 0.9rem 0 0.2rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+
+.rt-section hr {
+  border: none;
+  border-top: 1px solid #555;
+  margin: 0 0 0.4rem;
+}
+
+.rt-entry { margin: 0.5rem 0; }
+.rt-dates { color: #444; font-size: 0.85rem; }
+.rt-entry ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
