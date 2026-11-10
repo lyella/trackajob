@@ -28,7 +28,7 @@ The point of TrackAJob is helping the developer get a job, and the developer is 
 
 - Frontend: React with TypeScript, built with Vite, deployed to Vercel. Plain CSS to start.
 - Backend: Python, FastAPI, running as Vercel serverless functions per ADR-0005.
-- Database: PostgreSQL on Neon (free tier), accessed through SQLAlchemy. Neon over Supabase because it is plain managed Postgres, and Supabase's extras (auth, storage) are things v1 deliberately does not use.
+- Database: SQLite locally, Turso (libSQL, free tier) in production, accessed through SQLAlchemy. Postgres on Neon stays provisioned as the documented fallback, see ADR-0006. Neon's bundled services were removed to keep the stack strictly free (ADR-0005 amendment).
 - AI: a hosted LLM through an API, provider picked during the spike based on output quality and cost per call.
 - Export: PDF drawn with fpdf2 directly from resume data (pure Python, small dependency, serverless safe, enough for a single column ATS layout). DOCX written with python-docx. No headless browsers, no WeasyPrint, see ADR-0005.
 

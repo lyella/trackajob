@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     # .env.local holds what the Neon CLI writes (last file wins).
     model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
-    # In production set DATABASE_URL to the Neon connection string.
+    # In production set DATABASE_URL to the database connection string.
     database_url: str = Field(default_factory=_default_database_url)
+    # Turso remote connections need the database auth token separately.
+    turso_auth_token: str = ""
 
     app_name: str = "TrackAJob"
     debug: bool = False
