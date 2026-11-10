@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import SessionToken, User, utcnow
-
 SESSION_COOKIE = "tj_session"
 SESSION_DAYS = 30
 _SCRYPT_N = 2**14
@@ -50,7 +49,7 @@ def user_for_session(db: Session, token: str) -> User | None:
     row = db.execute(
         select(SessionToken).where(SessionToken.token == token)
     ).scalar_one_or_none()
-    if row is None or row.expires_at <= datetime.utcnow():
+    if row is None or row.expires_at <= utcnow():
         return None
     return db.get(User, row.user_id)
 

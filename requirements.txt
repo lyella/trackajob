@@ -10,3 +10,4 @@ email-validator>=2.0
 # Turso SQLAlchemy dialect. Native dependency ships for Linux/macOS only;
 # local development on Windows uses the plain SQLite fallback instead.
 sqlalchemy-libsql; sys_platform != "win32"
+pytest>=8
