@@ -46,7 +46,7 @@ Weeks assume roughly 10 hours a week of developer time. AI can generate code far
 
 ### M0: Setup (week 1)
 
-- Frontend and backend scaffolding, repo structure, Vercel project with deploy on push, Neon database created and reachable from a backend function.
+- Frontend and backend scaffolding, repo structure, Vercel project with deploy on push, database reachable from a backend function (Turso in production since ADR-0006).
 - Health check endpoint deployed to production.
 - Done when: pushing to main deploys both apps and the database connection works from the deployed function, not just locally.
 
