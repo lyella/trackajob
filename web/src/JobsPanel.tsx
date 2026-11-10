@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ResumeContent, ResumeOut } from './types'
 import { DiffView } from './DiffView'
 
@@ -84,6 +84,28 @@ export function JobsPanel() {
   const [tailoring, setTailoring] = useState(false)
   const [tailorResult, setTailorResult] = useState<TailorResponse | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const bmRef = useRef<HTMLAnchorElement>(null)
+  const [copied, setCopied] = useState(false)
+
+  // React blocks javascript: URLs in JSX hrefs (a security measure), so the
+  // drag handle gets its URL attached natively after mount; clicking the
+  // handle copies the code with instructions instead.
+  useEffect(() => {
+    if (bmRef.current) {
+      bmRef.current.setAttribute(
+        'href',
+        'javascript:' + encodeURIComponent(BOOKMARKLET(window.location.origin))
+      )
+    }
+  }, [])
+
+  async function copyBookmarklet() {
+    await navigator.clipboard
+      .writeText('javascript:' + encodeURIComponent(BOOKMARKLET(window.location.origin)))
+      .catch(() => {})
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 3000)
+  }
 
   useEffect(() => {
     api<Job[]>('/api/jobs')
@@ -202,16 +224,25 @@ export function JobsPanel() {
       <details className="add-job" open={addOpen} onToggle={(e) => setAddOpen(e.currentTarget.open)}>
         <summary>Add a job post</summary>
         <p className="muted hint-bookmarklet">
-          Manually below, or with one click from the job page: drag this to
-          your bookmarks bar, open a job on LinkedIn, Indeed, JobStreet (or any
-          career site), and click it. TrackAJob opens pre-filled.{' '}
+          Manually below, or save jobs in one click from the job page:{' '}
+          <strong>drag this button to your bookmarks bar</strong>
+          (show it with Ctrl+Shift+B if hidden), open a job on LinkedIn,
+          Indeed, JobStreet, or any career site, and click the bookmark.{' '}
           <a
-            href={`javascript:${encodeURIComponent(BOOKMARKLET(window.location.origin))}`}
-            onClick={(e) => e.preventDefault()}
-            title="Drag me to your bookmarks bar"
+            ref={bmRef}
+            onClick={(e) => {
+              e.preventDefault()
+              void copyBookmarklet()
+            }}
+            title="Drag me to your bookmarks bar. Clicking copies the code instead."
           >
             [+1] Save to TrackAJob
           </a>
+        </p>
+        <p className="hint-label">
+          {copied
+            ? 'Copied! Create a new bookmark, paste this as its URL, done.'
+            : 'Or click the button: it copies the bookmarklet code. Then right-click the bookmarks bar, choose "Add page", paste as the URL.'}
         </p>
         <div className="add-form">
           <label>

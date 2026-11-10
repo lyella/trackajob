@@ -249,3 +249,5 @@ button.primary:hover:not(:disabled) { background: #1d557a; }
   font-weight: 700;
   cursor: grab;
 }
+
+.hint-label { font-size: 0.8rem; color: var(--muted); margin: 0.2rem 0 0.6rem; }
