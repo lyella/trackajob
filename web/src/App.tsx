@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { api, ResumeOut, User } from './types'
 import { createStarterResume, ResumeEditor } from './ResumeEditor'
 import { JobsPanel } from './JobsPanel'
@@ -28,6 +28,24 @@ export default function App() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [pendingImport, setPendingImport] = useState<Record<string, string> | null>(null)
+  const consumeImport = useCallback(() => setPendingImport(null), [])
+
+  // Bookmarklet handoff: a scraped page opens this app at #importing and
+  // postMessages the job data once it finishes loading. The hash is the
+  // click token: without it, messages are ignored entirely. The ack lets
+  // the bookmarklet stop retrying as soon as the payload has landed.
+  useEffect(() => {
+    function receiveImport(ev: MessageEvent) {
+      if (window.location.hash !== '#importing') return
+      const data = ev.data as { type?: string; job?: Record<string, string> } | null
+      if (!data || data.type !== 'trackajob-import' || !data.job) return
+      history.replaceState(null, '', window.location.pathname)
+      setPendingImport(data.job)
+    }
+    window.addEventListener('message', receiveImport)
+    return () => window.removeEventListener('message', receiveImport)
+  }, [])
 
   useEffect(() => {
     api<User>('/api/auth/me')
@@ -164,7 +182,7 @@ export default function App() {
       </nav>
 
       {tab === 'jobs' ? (
-        <JobsPanel />
+        <JobsPanel pendingImport={pendingImport} onImportConsumed={consumeImport} />
       ) : (
         <>
           <h2>Resumes</h2>

@@ -52,8 +52,20 @@ function BOOKMARKLET(origin: string): string {
     d=d?d.innerText:document.body.innerText;
     return {title:t,company:c,description:d.slice(0,20000),url:u};
   }
+  var data=job();
   var w=window.open(on+'#importing','_blank');
-  setTimeout(function(){w.postMessage({type:'trackajob-import',job:job()},on);},900);
+  if(!w){alert('TrackAJob: the import window was blocked. Allow popups for this site and try again.');return;}
+  var tries=0;
+  var timer=setInterval(function(){
+    tries++;
+    try{w.postMessage({type:'trackajob-import',job:data},on);}catch(e){}
+    if(tries>=25)clearInterval(timer);
+  },800);
+  window.addEventListener('message',function ack(ev){
+    if(ev.origin!==on)return;
+    var d=ev.data||{};
+    if(d.type==='trackajob-import-ack')clearInterval(timer);
+  });
 })();`
 }
 
@@ -71,7 +83,13 @@ type TailorResponse = {
   cost_usd: number
 }
 
-export function JobsPanel() {
+export function JobsPanel({
+  pendingImport,
+  onImportConsumed,
+}: {
+  pendingImport: Record<string, string> | null
+  onImportConsumed: () => void
+}) {
   const [jobs, setJobs] = useState<Job[] | null>(null)
   const [filter, setFilter] = useState<JobStatus | 'all'>('all')
   const [form, setForm] = useState(emptyForm)
@@ -122,38 +140,30 @@ export function JobsPanel() {
       .catch(() => {})
   }, [])
 
-  // Bookmarklet handoff: a page on another site opened this tab with the
-  // #importing hash and posts one message with the job data it read from
-  // the page the user was viewing. The hash is the click token: without
-  // it, we ignore messages entirely.
+  // Bookmarklet handoff: App.tsx collects the scraped job from the opener
+  // window (messages are only accepted while the #importing hash is set),
+  // and this effect consumes it once, prefilling the add form.
   useEffect(() => {
-    function receive(ev: MessageEvent) {
-      const data = ev.data as
-        | { type: 'trackajob-import'; job: Record<string, string> }
-        | undefined
-      if (!data || data.type !== 'trackajob-import') return
-      if (window.location.hash !== '#importing') return
-      history.replaceState(null, '', window.location.pathname)
-      const hostname = (() => {
-        try {
-          return new URL(data.job.url || '').hostname.replace(/^www\./, '')
-        } catch {
-          return ''
-        }
-      })()
-      setForm({
-        title: (data.job.title || '').slice(0, 200),
-        company: (data.job.company || '').slice(0, 150),
-        source: (hostname.split('.')[0] || 'paste').slice(0, 80),
-        url: (data.job.url || '').slice(0, 500),
-        description: (data.job.description || '').slice(0, 50000),
-        notes: '',
-      })
-      setAddOpen(true)
-    }
-    window.addEventListener('message', receive)
-    return () => window.removeEventListener('message', receive)
-  }, [])
+    if (!pendingImport) return
+    const j = pendingImport
+    const hostname = (() => {
+      try {
+        return new URL(j.url || '').hostname.replace(/^www\./, '')
+      } catch {
+        return ''
+      }
+    })()
+    setForm({
+      title: (j.title || '').slice(0, 200),
+      company: (j.company || '').slice(0, 150),
+      source: (hostname.split('.')[0] || 'paste').slice(0, 80),
+      url: (j.url || '').slice(0, 500),
+      description: (j.description || '').slice(0, 50000),
+      notes: '',
+    })
+    setAddOpen(true)
+    onImportConsumed()
+  }, [pendingImport, onImportConsumed])
 
   async function runTailor(jobId: number) {
     if (tailorResumeId == null) return
