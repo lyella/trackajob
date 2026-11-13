@@ -8,6 +8,7 @@ import {
   ResumeVersionMeta,
 } from './types'
 import { formatDateTime, relativeTime } from './format'
+import { ATS_GUARANTEES, scoreOf, useResumeAudit } from './ats'
 import { ResumePreview } from './ResumePreview'
 import { Alert, Button, ConfirmDialog, Field, Loading, useToast } from './ui'
 
@@ -29,6 +30,83 @@ function toBullets(text: string): string[] {
 
 function bulletsToText(bullets: string[]): string {
   return bullets.join('\n')
+}
+
+/** The ATS panel: a live readiness score plus the specific things to fix.
+ * It sits above the preview because the preview is what the user is
+ * checking against it. */
+function AtsPanel({ content }: { content: ResumeContent }) {
+  const checks = useResumeAudit(content)
+  const { score, label } = scoreOf(checks)
+  const [open, setOpen] = useState(true)
+  const errors = checks.filter((c) => c.level === 'error')
+  const warns = checks.filter((c) => c.level === 'warn')
+  const tips = checks.filter((c) => c.level === 'tip')
+  const shown = [...errors, ...warns, ...tips]
+
+  return (
+    <section className="ats-panel" aria-labelledby="ats-heading">
+      <div className="ats-head">
+        <div>
+          <h2 id="ats-heading">ATS check</h2>
+          <span className="ats-summary">
+            {errors.length + warns.length === 0
+              ? 'No issues found'
+              : `${errors.length + warns.length} to fix`}
+          </span>
+        </div>
+        <div className="ats-score" data-level={score >= 90 ? 'good' : score >= 70 ? 'ok' : 'bad'}>
+          <span className="ats-score-value tabular">{score}</span>
+          <span className="ats-score-label">{label}</span>
+        </div>
+      </div>
+
+      <div className="ats-bar" aria-hidden="true">
+        <span
+          className="ats-bar-fill"
+          data-level={score >= 90 ? 'good' : score >= 70 ? 'ok' : 'bad'}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+
+      {shown.length > 0 && (
+        <>
+          <button
+            type="button"
+            className="ats-toggle"
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? 'Hide details' : `Show ${shown.length} check${shown.length === 1 ? '' : 's'}`}
+          </button>
+          {open && (
+            <ul className="ats-list">
+              {shown.map((check) => (
+                <li key={check.id} className={`ats-item ats-${check.level}`}>
+                  <span className="ats-marker" aria-hidden="true">
+                    {check.level === 'error' ? '!' : check.level === 'warn' ? '·' : 'i'}
+                  </span>
+                  <div>
+                    <strong>{check.title}</strong>
+                    <p>{check.detail}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+
+      <details className="ats-guarantees">
+        <summary>What this export guarantees</summary>
+        <ul>
+          {ATS_GUARANTEES.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </details>
+    </section>
+  )
 }
 
 export function ResumeEditor({
@@ -831,6 +909,7 @@ export function ResumeEditor({
         </div>
 
         <div className="preview-column">
+          <AtsPanel content={content} />
           <div className="preview-toolbar">
             <h2>Live preview</h2>
             <span className="muted small">Matches the PDF export</span>

@@ -84,6 +84,7 @@ export function ResumesScreen({
     <div className="page">
       <div className="page-head">
         <div>
+          <span className="eyebrow">Library</span>
           <h1>Resumes</h1>
           <p>Your base resume and every tailored version, in one place.</p>
         </div>

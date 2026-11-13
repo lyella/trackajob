@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api, errorMessage, User } from './types'
+import { ThemeToggle } from './theme'
 import { Alert, Button, Field } from './ui'
 
 type Mode = 'login' | 'signup'
@@ -50,15 +51,45 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
 
   return (
     <div className="auth-wrap">
+      <div className="auth-theme">
+        <ThemeToggle />
+      </div>
+      {/* Left panel: the pitch. Hidden on narrow screens, where the form is
+          the only thing that matters. */}
+      <aside className="auth-aside" aria-hidden="true">
+        <div className="auth-aside-inner">
+          <span className="auth-sticker">job hunt, organised</span>
+          <h2 className="auth-headline">
+            Every application.
+            <br />
+            Every resume version.
+            <br />
+            <span className="auth-headline-mark">One place.</span>
+          </h2>
+          <ul className="auth-points">
+            <li>Save a job post in one click.</li>
+            <li>Tailor your resume to it, without inventing anything.</li>
+            <li>Know exactly which version you sent, and when.</li>
+          </ul>
+          <div className="auth-marquee">
+            <span>ATS-SAFE PDF + DOCX</span>
+            <span aria-hidden="true">✦</span>
+            <span>VERSION HISTORY</span>
+            <span aria-hidden="true">✦</span>
+            <span>DIFF BEFORE YOU SEND</span>
+          </div>
+        </div>
+      </aside>
+
       <div className="auth-card">
         <div className="auth-brand">
           <span className="brand-mark" aria-hidden="true">
             T
           </span>
           <div>
-            <h1 style={{ fontSize: '1.35rem' }}>TrackAJob</h1>
+            <h1 style={{ fontSize: '1.6rem' }}>TrackAJob</h1>
             <p className="auth-tagline">
-              Track every application. Tailor your resume to each job post.
+              {isSignup ? 'Create an account to start tracking.' : 'Welcome back. Sign in to continue.'}
             </p>
           </div>
         </div>
