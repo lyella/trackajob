@@ -46,6 +46,40 @@ class Settings(BaseSettings):
     app_name: str = "TrackAJob"
     debug: bool = False
 
+    # --- Email delivery ---------------------------------------------------
+    # "console" prints messages to the server log (default, so every flow is
+    # testable before credentials exist), "smtp" uses a mail server, and
+    # "resend" uses the Resend HTTP API.
+    email_driver: str = "console"
+    email_from: str = "TrackAJob <no-reply@trackajob.local>"
+
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_starttls: bool = True
+
+    resend_api_key: str = ""
+
+    # --- Bot protection ---------------------------------------------------
+    # Cloudflare Turnstile. The site key is public and served to the browser;
+    # the secret stays on the server.
+    turnstile_site_key: str = ""
+    turnstile_secret: str = ""
+
+    # --- Links ------------------------------------------------------------
+    # Absolute base URL used in verification and reset emails. Must be the
+    # public origin, or the links in the email will not work.
+    app_base_url: str = "http://localhost:5173"
+
+    verify_token_hours: int = 24
+    reset_token_minutes: int = 60
+
+    @property
+    def is_production(self) -> bool:
+        """Vercel sets VERCEL=1 in its build and runtime environments."""
+        return bool(os.environ.get("VERCEL")) or os.environ.get("APP_ENV") == "production"
+
 
 @lru_cache
 def get_settings() -> Settings:

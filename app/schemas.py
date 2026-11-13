@@ -9,6 +9,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 class SignupIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
+    # Cloudflare Turnstile token from the widget. Optional at the schema
+    # level so the API returns a clear captcha error rather than a generic
+    # validation error when it is missing.
+    captcha_token: str | None = Field(default=None, max_length=4096)
 
 
 class LoginIn(BaseModel):
@@ -16,11 +20,31 @@ class LoginIn(BaseModel):
     registered account has, and return 401, not a validation 422."""
     email: EmailStr
     password: str = Field(max_length=128)
+    captcha_token: str | None = Field(default=None, max_length=4096)
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+    captcha_token: str | None = Field(default=None, max_length=4096)
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailIn(BaseModel):
+    token: str = Field(min_length=1, max_length=256)
+
+
+class ResendVerificationIn(BaseModel):
+    captcha_token: str | None = Field(default=None, max_length=4096)
 
 
 class UserOut(BaseModel):
     id: int
     email: str
+    email_verified: bool = True
 
 
 class LinkEntry(BaseModel):

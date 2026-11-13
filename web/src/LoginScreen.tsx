@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { api, errorMessage, User } from './types'
-import { ThemeToggle } from './theme'
+import { Captcha, resetCaptcha, useCaptchaConfig } from './captcha'
+import { ThemeToggle, useTheme } from './theme'
 import { Alert, Button, Field } from './ui'
 
-type Mode = 'login' | 'signup'
+type Mode = 'login' | 'signup' | 'forgot'
 
-/** Friendly copy for the handful of auth failures the API can return. */
+/** Friendly copy for the auth failures the API can return. */
 function humanizeAuthError(message: string): string {
   const m = message.toLowerCase()
   if (m.includes('at least 8 characters'))
@@ -24,38 +25,77 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+
+  const captchaConfig = useCaptchaConfig()
+  const { theme } = useTheme()
 
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const passwordLongEnough = password.length >= 8
+  const captchaReady = !captchaConfig?.enabled || Boolean(captchaToken)
+
+  function switchMode(next: Mode) {
+    setMode(next)
+    setError('')
+    setNotice('')
+    setPassword('')
+    resetCaptcha(setCaptchaToken)
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (busy) return
     setBusy(true)
     setError('')
+    setNotice('')
     try {
+      if (mode === 'forgot') {
+        await api('/api/auth/forgot-password', {
+          method: 'POST',
+          body: JSON.stringify({ email: email.trim(), captcha_token: captchaToken }),
+        })
+        // Deliberately the same message whether or not the account exists.
+        setNotice(
+          'If that email has an account, a reset link is on its way. Check your inbox and spam folder.'
+        )
+        resetCaptcha(setCaptchaToken)
+        return
+      }
+
       const user = await api<User>(`/api/auth/${mode}`, {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          captcha_token: captchaToken,
+        }),
       })
       onSignedIn(user)
     } catch (err) {
       setError(humanizeAuthError(errorMessage(err)))
+      resetCaptcha(setCaptchaToken)
     } finally {
       setBusy(false)
     }
   }
 
   const isSignup = mode === 'signup'
+  const isForgot = mode === 'forgot'
+
+  const canSubmit = isForgot
+    ? emailLooksValid && captchaReady
+    : isSignup
+      ? emailLooksValid && passwordLongEnough && captchaReady
+      : emailLooksValid && password.length > 0 && captchaReady
 
   return (
     <div className="auth-wrap">
       <div className="auth-theme">
         <ThemeToggle />
       </div>
-      {/* Left panel: the pitch. Hidden on narrow screens, where the form is
-          the only thing that matters. */}
+
       <aside className="auth-aside" aria-hidden="true">
         <div className="auth-aside-inner">
           <span className="auth-sticker">job hunt, organised</span>
@@ -87,9 +127,15 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
             T
           </span>
           <div>
-            <h1 style={{ fontSize: '1.6rem' }}>TrackAJob</h1>
+            <h1 style={{ fontSize: '1.6rem' }}>
+              {isForgot ? 'Reset your password' : 'TrackAJob'}
+            </h1>
             <p className="auth-tagline">
-              {isSignup ? 'Create an account to start tracking.' : 'Welcome back. Sign in to continue.'}
+              {isForgot
+                ? 'Enter your email and we will send you a reset link.'
+                : isSignup
+                  ? 'Create an account to start tracking.'
+                  : 'Welcome back. Sign in to continue.'}
             </p>
           </div>
         </div>
@@ -113,61 +159,77 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
             )}
           </Field>
 
-          <Field
-            label="Password"
-            hint={
-              isSignup
-                ? password.length > 0 && !passwordLongEnough
-                  ? `${8 - password.length} more character${8 - password.length === 1 ? '' : 's'} needed.`
-                  : 'At least 8 characters.'
-                : undefined
-            }
-          >
-            {(p) => (
-              <input
-                {...p}
-                type="password"
-                name="password"
-                autoComplete={isSignup ? 'new-password' : 'current-password'}
-                placeholder={isSignup ? 'Choose a password…' : 'Your password…'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            )}
-          </Field>
+          {!isForgot && (
+            <Field
+              label="Password"
+              hint={
+                isSignup
+                  ? password.length > 0 && !passwordLongEnough
+                    ? `${8 - password.length} more character${8 - password.length === 1 ? '' : 's'} needed.`
+                    : 'At least 8 characters.'
+                  : undefined
+              }
+            >
+              {(p) => (
+                <input
+                  {...p}
+                  type="password"
+                  name="password"
+                  autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  placeholder={isSignup ? 'Choose a password…' : 'Your password…'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              )}
+            </Field>
+          )}
+
+          {captchaConfig?.enabled && captchaConfig.siteKey && (
+            <Captcha siteKey={captchaConfig.siteKey} onToken={setCaptchaToken} theme={theme} />
+          )}
 
           {error && <Alert tone="error">{error}</Alert>}
+          {notice && <Alert tone="success">{notice}</Alert>}
 
-          <Button
-            type="submit"
-            variant="primary"
-            block
-            loading={busy}
-            disabled={!emailLooksValid || password.length === 0 || (isSignup && !passwordLongEnough)}
-          >
+          <Button type="submit" variant="primary" block loading={busy} disabled={!canSubmit}>
             {busy
-              ? isSignup
-                ? 'Creating account…'
-                : 'Signing in…'
-              : isSignup
-                ? 'Create account'
-                : 'Sign in'}
+              ? isForgot
+                ? 'Sending…'
+                : isSignup
+                  ? 'Creating account…'
+                  : 'Signing in…'
+              : isForgot
+                ? 'Send reset link'
+                : isSignup
+                  ? 'Create account'
+                  : 'Sign in'}
           </Button>
+
+          {!isForgot && mode === 'login' && (
+            <button type="button" className="link-btn auth-forgot" onClick={() => switchMode('forgot')}>
+              Forgot your password?
+            </button>
+          )}
         </form>
 
         <p className="auth-footer">
-          {isSignup ? 'Already have an account? ' : 'New to TrackAJob? '}
-          <button
-            type="button"
-            className="link-btn"
-            onClick={() => {
-              setMode(isSignup ? 'login' : 'signup')
-              setError('')
-            }}
-          >
-            {isSignup ? 'Sign in' : 'Create an account'}
-          </button>
+          {isForgot ? (
+            <button type="button" className="link-btn" onClick={() => switchMode('login')}>
+              Back to sign in
+            </button>
+          ) : (
+            <>
+              {isSignup ? 'Already have an account? ' : 'New to TrackAJob? '}
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => switchMode(isSignup ? 'login' : 'signup')}
+              >
+                {isSignup ? 'Sign in' : 'Create an account'}
+              </button>
+            </>
+          )}
         </p>
       </div>
     </div>

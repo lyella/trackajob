@@ -87,6 +87,18 @@ def ensure_schema_upgrades():
             existing = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(jobs)"))}
             if existing and "resume_version_id" not in existing:
                 conn.execute(sa.text("ALTER TABLE jobs ADD COLUMN resume_version_id INTEGER"))
+
+            users = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(users)"))}
+            if users and "email_verified" not in users:
+                # Existing accounts predate verification and were created
+                # without it, so they are grandfathered in. Backfilling to 0
+                # would show every current user a "verify your email" banner
+                # for an email we never sent them.
+                conn.execute(
+                    sa.text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT 1")
+                )
+            if users and "email_verified_at" not in users:
+                conn.execute(sa.text("ALTER TABLE users ADD COLUMN email_verified_at DATETIME"))
     except Exception as exc:  # noqa: BLE001 - deliberate: boot must survive
         print(f"WARNING: schema upgrade check failed: {exc}", flush=True)
 

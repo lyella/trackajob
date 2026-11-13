@@ -77,7 +77,6 @@ jobs = db.execute(select(JobPost).where(JobPost.user_id == user.id)).scalars()
 gets a 404, not the data. See `tests/test_jobs.py::test_users_cannot_see_or_touch_other_users_jobs`.
 
 ### 3.2 Errors are data, not stack traces
-
 Return a message a person can act on. When the failure has a next step, send
 it as a structured reason so the UI can give that step:
 
@@ -134,8 +133,46 @@ Tests extract text back with `pypdf`, an independent parser, and assert the
 content survives. A test that only checks ASCII does not prove an export is
 readable.
 
-### 3.7 Dates
+### 3.7 Authentication and account recovery
 
+Auth is the one area where a small mistake is a serious breach. The rules:
+
+- **Tokens are stored hashed.** `auth_tokens` holds a SHA-256 of the token,
+  never the token itself, so a database leak does not hand out working reset
+  links. The raw value exists only in the email.
+- **Every token is single use and expiring.** `consume_token` checks
+  `used_at` and `expires_at` and burns the row. Replaying a link must fail.
+- **Tokens are scoped by purpose.** A verification token cannot reset a
+  password. The purpose is part of the lookup, not a field you trust later.
+- **Issuing a new token invalidates the old one** for that purpose, so
+  "resend" cannot leave two live links.
+- **Password reset revokes every session.** An attacker holding a stolen
+  cookie loses it when the owner resets.
+- **Never reveal whether an account exists.** `forgot_password` returns the
+  same body and status for known and unknown addresses, and swallows send
+  failures. `test_forgot_password_does_not_reveal_whether_an_account_exists`
+  guards this; it was verified to fail when a 404 is introduced.
+- **Captcha fails closed.** With no secret configured, production refuses
+  protected requests with a 503 rather than running unprotected, and a
+  Cloudflare outage does not become an open door. Local development skips
+  the check so every flow is testable.
+- **Email delivery is pluggable.** `console` (default) prints to the server
+  log so flows work before credentials exist; `smtp` and `resend` are
+  configuration changes, never code changes. A failed send raises
+  `EmailError` and is surfaced, not swallowed.
+- **Verification does not block the app.** A new user is signed in
+  immediately and nudged by a banner. A broken mail provider must never lock
+  someone out of their own data.
+- **Existing accounts are grandfathered.** The migration backfills
+  `email_verified = 1`; backfilling to 0 would nag every current user about
+  an email we never sent.
+
+On the frontend, token screens must be keyed by the token
+(`key={route.token}`). Without it React reuses the mounted component and a
+second link inherits the first one's result, which makes the page lie about
+whether verification succeeded.
+
+### 3.8 Dates
 Store naive UTC. In the frontend, `parseApiDate` in `format.ts` appends `Z`
 before parsing, because a naive timestamp read as local time shows "3 hours
 ago" for something saved a second earlier.
@@ -271,6 +308,7 @@ network test fails for reasons that are not your bug.
 | Data model | ADR-0007 |
 | Statistics | ADR-0008 |
 | Theming and accessibility | ADR-0009 |
+| Auth, verification, captcha | ADR-0010 |
 
 Write an ADR when a choice is expensive to reverse, affects more than one
 area, or someone will later ask "why on earth is it done this way". State the

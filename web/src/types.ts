@@ -21,7 +21,7 @@ export type ResumeContent = {
   projects: ProjectEntry[]
 }
 
-export type User = { id: number; email: string }
+export type User = { id: number; email: string; email_verified?: boolean }
 export type ResumeVersionMeta = { version: number; created_at: string }
 export type ResumeOut = {
   id: number

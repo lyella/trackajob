@@ -10,6 +10,8 @@ export type Route =
   | { name: 'applications'; status?: string; q?: string; job?: number }
   | { name: 'stats' }
   | { name: 'login' }
+  | { name: 'reset-password'; token: string }
+  | { name: 'verify-email'; token: string }
 
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#\/?/, '')
@@ -27,6 +29,10 @@ export function parseHash(hash: string): Route {
     }
   }
   if (segments[0] === 'stats') return { name: 'stats' }
+  if (segments[0] === 'reset-password')
+    return { name: 'reset-password', token: params.get('token') ?? '' }
+  if (segments[0] === 'verify-email')
+    return { name: 'verify-email', token: params.get('token') ?? '' }
   if (segments[0] === 'resumes' && segments[1]) {
     const id = Number(segments[1])
     if (Number.isFinite(id) && id > 0) return { name: 'resume', id }
@@ -41,6 +47,10 @@ export function routeToHash(route: Route): string {
       return `#/resumes/${route.id}`
     case 'stats':
       return '#/stats'
+    case 'reset-password':
+      return `#/reset-password?token=${encodeURIComponent(route.token)}`
+    case 'verify-email':
+      return `#/verify-email?token=${encodeURIComponent(route.token)}`
     case 'applications': {
       const p = new URLSearchParams()
       if (route.status && route.status !== 'all') p.set('status', route.status)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api, errorMessage, ResumeOut, User } from './types'
+import { ResetPasswordScreen, VerifyEmailScreen } from './AccountScreens'
 import { ResumeEditor } from './ResumeEditor'
 import { ResumesScreen } from './ResumesScreen'
 import { JobsPanel } from './JobsPanel'
@@ -7,11 +8,61 @@ import { LoginScreen } from './LoginScreen'
 import { StatsScreen } from './StatsScreen'
 import { useRoute } from './router'
 import { ThemeProvider, ThemeToggle } from './theme'
-import { Loading, ToastProvider, useToast } from './ui'
+import { Button, Loading, ToastProvider, useToast } from './ui'
 
 type ImportPayload = Record<string, string>
 
-function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
+/** Shown until the address is confirmed. The app stays fully usable, so a
+ * broken mail provider cannot lock anyone out of their own data. */
+function VerifyBanner({ onVerified }: { onVerified: () => void }) {
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  async function resend() {
+    setState('sending')
+    setMessage('')
+    try {
+      await api('/api/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      setState('sent')
+    } catch (e) {
+      setState('error')
+      setMessage(errorMessage(e))
+    }
+  }
+
+  return (
+    <div className="verify-banner" role="status">
+      <div className="verify-banner-text">
+        <strong>Confirm your email address.</strong>{' '}
+        {state === 'sent'
+          ? 'We sent a new link. Check your inbox and spam folder.'
+          : 'We sent you a link when you signed up. Confirm it so you never lose access to your account.'}
+        {state === 'error' && <span className="verify-banner-error"> {message}</span>}
+      </div>
+      <div className="cluster">
+        <Button size="sm" onClick={resend} loading={state === 'sending'} disabled={state === 'sent'}>
+          {state === 'sent' ? 'Link sent' : 'Resend link'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onVerified} title="Check again">
+          I have confirmed
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function Shell({
+  user,
+  onSignedOut,
+  onUserChanged,
+}: {
+  user: User
+  onSignedOut: () => void
+  onUserChanged: () => void
+}) {
   const { route, navigate, setApplicationQuery } = useRoute()
   const [resumes, setResumes] = useState<ResumeOut[] | null>(null)
   const [pendingImport, setPendingImport] = useState<ImportPayload | null>(null)
@@ -136,6 +187,9 @@ function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
       </header>
 
       <main id="main">
+        {user.email_verified === false && (
+          <VerifyBanner onVerified={onUserChanged} />
+        )}
         {route.name === 'resume' ? (
           <ResumeEditor
             resumeId={route.id}
@@ -172,21 +226,57 @@ function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
 export default function App() {
   const [user, setUser] = useState<User | null>(null)
   const [authChecked, setAuthChecked] = useState(false)
+  const { route } = useRoute()
 
-  useEffect(() => {
+  const refreshUser = useCallback(() => {
     api<User>('/api/auth/me')
       .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setAuthChecked(true))
   }, [])
 
+  useEffect(() => {
+    refreshUser()
+  }, [refreshUser])
+
+  // Token links work whether or not someone is signed in: a reset link may
+  // be opened on a device where the session already expired. The `key` makes
+  // React remount when the token changes, so a second link never inherits the
+  // first one's result.
+  const tokenScreen =
+    route.name === 'reset-password' ? (
+      <ResetPasswordScreen
+        key={route.token}
+        token={route.token}
+        onDone={() => {
+          refreshUser()
+          window.location.hash = '#/resumes'
+        }}
+      />
+    ) : route.name === 'verify-email' ? (
+      <VerifyEmailScreen
+        key={route.token}
+        token={route.token}
+        onDone={() => {
+          refreshUser()
+          window.location.hash = '#/resumes'
+        }}
+      />
+    ) : null
+
   return (
     <ThemeProvider>
       <ToastProvider>
-        {!authChecked ? (
+        {tokenScreen ? (
+          tokenScreen
+        ) : !authChecked ? (
           <Loading label="Starting TrackAJob…" />
         ) : user ? (
-          <Shell user={user} onSignedOut={() => setUser(null)} />
+          <Shell
+            user={user}
+            onSignedOut={() => setUser(null)}
+            onUserChanged={refreshUser}
+          />
         ) : (
           <LoginScreen onSignedIn={setUser} />
         )}
