@@ -8,7 +8,83 @@ import { LoginScreen } from './LoginScreen'
 import { StatsScreen } from './StatsScreen'
 import { useRoute } from './router'
 import { ThemeProvider, ThemeToggle } from './theme'
-import { Button, Loading, ToastProvider, useToast } from './ui'
+import { Alert, Button, ConfirmDialog, Loading, ToastProvider, useToast } from './ui'
+
+/** Password help for a signed-in user.
+ *
+ * Asking for a reset link while signed in is the enumeration-safe way to
+ * offer it: the caller is already authenticated as the owner, so showing
+ * their own link reveals nothing. The public forgot-password form never
+ * returns a link, because that would tell a stranger whether an account
+ * exists.
+ */
+function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [link, setLink] = useState('')
+  const [expires, setExpires] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!open) {
+      setLink('')
+      setError('')
+    }
+  }, [open])
+
+  async function requestLink() {
+    setBusy(true)
+    setError('')
+    try {
+      const r = await api<{ reset_link: string; expires_minutes: number }>(
+        '/api/auth/reset-link',
+        { method: 'POST', body: JSON.stringify({}) }
+      )
+      setLink(r.reset_link)
+      setExpires(r.expires_minutes)
+      if (!r.reset_link) {
+        setError(
+          'A reset link was created but email delivery is not configured, so it cannot be shown here.'
+        )
+      }
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ConfirmDialog
+      open={open}
+      title="Change your password"
+      confirmLabel={link ? 'Done' : 'Get a reset link'}
+      cancelLabel="Close"
+      tone="primary"
+      busy={busy}
+      onCancel={onClose}
+      onConfirm={link ? onClose : requestLink}
+    >
+      {link ? (
+        <>
+          <p>Use this link to choose a new password. It works once and expires in {expires} minutes.</p>
+          <a className="btn btn-primary btn-block" href={link}>
+            Choose a new password
+          </a>
+          <p className="small muted">
+            This is shown here because email delivery is not configured. Once a mail provider is
+            set up, the link is emailed instead.
+          </p>
+        </>
+      ) : (
+        <p>
+          We will create a one-time link you can use to set a new password. Your current password
+          keeps working until you use it.
+        </p>
+      )}
+      {error && <Alert tone="error">{error}</Alert>}
+    </ConfirmDialog>
+  )
+}
 
 type ImportPayload = Record<string, string>
 
@@ -66,6 +142,7 @@ function Shell({
   const { route, navigate, setApplicationQuery } = useRoute()
   const [resumes, setResumes] = useState<ResumeOut[] | null>(null)
   const [pendingImport, setPendingImport] = useState<ImportPayload | null>(null)
+  const [passwordOpen, setPasswordOpen] = useState(false)
   const toast = useToast()
 
   const refreshResumes = useCallback(async () => {
@@ -180,11 +257,16 @@ function Shell({
             <span className="user-email">{user.email}</span>
           </span>
           <ThemeToggle />
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => setPasswordOpen(true)}>
+            Password
+          </button>
           <button type="button" className="btn btn-sm btn-ghost" onClick={logout}>
             Sign out
           </button>
         </div>
       </header>
+
+      <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
 
       <main id="main">
         {user.email_verified === false && (

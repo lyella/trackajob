@@ -217,9 +217,11 @@ def forgot_password(
     account-enumeration oracle, so the response is identical whether or not
     the address exists. The email is only sent when there is an account.
 
-    The development link fallback is deliberately NOT returned here: handing
-    back a link only when the account exists would leak exactly the fact this
-    endpoint works to hide. Use the server log instead.
+    No link is ever returned from this endpoint, even in development. Any
+    response that carried the link would differ for a known address, which
+    is exactly the leak this endpoint exists to prevent. Signed-in users get
+    their link from POST /api/auth/reset-link instead, where identity is
+    already proven.
     """
     _check_captcha(payload.captcha_token, request)
 
@@ -236,6 +238,27 @@ def forgot_password(
             # leak that the address exists.
             print(f"WARNING: reset email failed for user {user.id}", flush=True)
     return {"status": "if that account exists, a reset link is on its way"}
+
+
+@router.post("/reset-link")
+def reset_link_for_signed_in_user(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Issue a reset link for the signed-in user and, when the fallback is
+    active, return it.
+
+    This is the enumeration-safe way to offer the link in development: the
+    caller is already authenticated as the account owner, so returning their
+    own link reveals nothing they do not already know.
+    """
+    settings = get_settings()
+    raw = issue_token(db, user.id, RESET, timedelta(minutes=settings.reset_token_minutes))
+    link = f"{settings.app_base_url.rstrip('/')}/#/reset-password?token={raw}"
+    return {
+        "reset_link": link if emailer.link_delivery_allowed() else "",
+        "expires_minutes": settings.reset_token_minutes,
+    }
 
 
 @router.post("/reset-password")

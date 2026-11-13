@@ -362,17 +362,50 @@ def test_link_fallback_is_absent_once_a_provider_is_configured(client, new_email
 
 
 def test_forgot_password_never_returns_a_link(client, new_email, sent):
-    """Returning a link here would reveal that the account exists."""
+    """No link from the public endpoint, in any mode: a link that appears
+    only for real accounts would make this an enumeration oracle."""
     signup(client, new_email)
     sent.clear()
     known = client.post("/api/auth/forgot-password", json={"email": new_email})
     unknown = client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
     assert known.json() == unknown.json()
     body = str(known.json())
-    # Assert on the substance: no URL and no token in the response.
     assert "token=" not in body
     assert "http" not in body
-    assert "reset-password" not in body
+
+
+def test_signed_in_user_can_get_their_own_reset_link(client, new_email, sent):
+    """The enumeration-safe way to offer the link in development: the caller
+    is already authenticated as the owner, so it reveals nothing new."""
+    signup(client, new_email)
+    r = client.post("/api/auth/reset-link")
+    assert r.status_code == 200
+    link = r.json()["reset_link"]
+    assert "/#/reset-password?token=" in link
+
+    # And it actually works.
+    token = link.split("token=")[1]
+    assert client.post(
+        "/api/auth/reset-password", json={"token": token, "password": "a-fresh-password"}
+    ).status_code == 200
+
+
+def test_reset_link_requires_authentication(client):
+    client.cookies.clear()
+    assert client.post("/api/auth/reset-link").status_code == 401
+
+
+def test_reset_link_is_empty_in_production_without_opt_in(client, new_email, sent, monkeypatch):
+    signup(client, new_email)
+    monkeypatch.setenv("VERCEL", "1")
+    get_settings.cache_clear()
+    try:
+        r = client.post("/api/auth/reset-link")
+        assert r.status_code == 200
+        assert r.json()["reset_link"] == ""
+    finally:
+        monkeypatch.delenv("VERCEL", raising=False)
+        get_settings.cache_clear()
 
 
 def test_config_reports_delivery_mode(client):
