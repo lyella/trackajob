@@ -4,7 +4,9 @@ import { ResumeEditor } from './ResumeEditor'
 import { ResumesScreen } from './ResumesScreen'
 import { JobsPanel } from './JobsPanel'
 import { LoginScreen } from './LoginScreen'
+import { StatsScreen } from './StatsScreen'
 import { useRoute } from './router'
+import { ThemeProvider, ThemeToggle } from './theme'
 import { Loading, ToastProvider, useToast } from './ui'
 
 type ImportPayload = Record<string, string>
@@ -55,7 +57,15 @@ function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
     onSignedOut()
   }
 
-  const activeTab = route.name === 'applications' ? 'applications' : 'resumes'
+  const activeTab =
+    route.name === 'applications' ? 'applications' : route.name === 'stats' ? 'stats' : 'resumes'
+
+  // On narrow screens the nav scrolls horizontally. Keep the active tab in
+  // view so the current section is never half-hidden.
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('.nav-link[aria-current="page"]')
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [activeTab])
 
   return (
     <>
@@ -101,12 +111,24 @@ function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
           >
             Applications
           </a>
+          <a
+            className="nav-link"
+            href="#/stats"
+            aria-current={activeTab === 'stats' ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault()
+              navigate({ name: 'stats' })
+            }}
+          >
+            Statistics
+          </a>
         </nav>
 
         <div className="app-header-right">
           <span className="user-chip" title={user.email}>
             <span className="user-email">{user.email}</span>
           </span>
+          <ThemeToggle />
           <button type="button" className="btn btn-sm btn-ghost" onClick={logout}>
             Sign out
           </button>
@@ -133,6 +155,8 @@ function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
             focusJobId={route.job}
             onQueryChange={setApplicationQuery}
           />
+        ) : route.name === 'stats' ? (
+          <StatsScreen />
         ) : (
           <ResumesScreen
             resumes={resumes}
@@ -157,14 +181,16 @@ export default function App() {
   }, [])
 
   return (
-    <ToastProvider>
-      {!authChecked ? (
-        <Loading label="Starting TrackAJob…" />
-      ) : user ? (
-        <Shell user={user} onSignedOut={() => setUser(null)} />
-      ) : (
-        <LoginScreen onSignedIn={setUser} />
-      )}
-    </ToastProvider>
+    <ThemeProvider>
+      <ToastProvider>
+        {!authChecked ? (
+          <Loading label="Starting TrackAJob…" />
+        ) : user ? (
+          <Shell user={user} onSignedOut={() => setUser(null)} />
+        ) : (
+          <LoginScreen onSignedIn={setUser} />
+        )}
+      </ToastProvider>
+    </ThemeProvider>
   )
 }

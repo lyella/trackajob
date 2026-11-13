@@ -8,6 +8,7 @@ export type Route =
   | { name: 'resumes' }
   | { name: 'resume'; id: number }
   | { name: 'applications'; status?: string; q?: string; job?: number }
+  | { name: 'stats' }
   | { name: 'login' }
 
 export function parseHash(hash: string): Route {
@@ -25,6 +26,7 @@ export function parseHash(hash: string): Route {
       job: Number.isFinite(job) && job > 0 ? job : undefined,
     }
   }
+  if (segments[0] === 'stats') return { name: 'stats' }
   if (segments[0] === 'resumes' && segments[1]) {
     const id = Number(segments[1])
     if (Number.isFinite(id) && id > 0) return { name: 'resume', id }
@@ -37,6 +39,8 @@ export function routeToHash(route: Route): string {
   switch (route.name) {
     case 'resume':
       return `#/resumes/${route.id}`
+    case 'stats':
+      return '#/stats'
     case 'applications': {
       const p = new URLSearchParams()
       if (route.status && route.status !== 'all') p.set('status', route.status)
