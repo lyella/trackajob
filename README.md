@@ -5,12 +5,20 @@ Track your job applications and tailor your resume to each job post.
 Status: pre-release. See PRD.md for the full vision, PLAN.md for the current
 milestone plan, and docs/adr/ for decision records.
 
+## Documentation
+
+| Document | Read it when |
+| --- | --- |
+| [docs/eli5.md](docs/eli5.md) | You are new to this or to building software at all. Plain language, no jargon. |
+| [docs/guidelines.md](docs/guidelines.md) | You are about to write or review code. The rules, and why each one exists. |
+| [docs/adr/](docs/adr/) | You want to know why a decision was made. |
+
 ## Layout
 
 - `app/` FastAPI backend (single Vercel Function; also serves the frontend)
 - `web/` React + TypeScript frontend, built with Vite
 - `cli/` tailoring spike used on real applications until the in-app flow lands
-- `docs/` PRD, plan, ADRs
+- `docs/` guidelines, the plain-language guide, and decision records
 
 ## Local development
 

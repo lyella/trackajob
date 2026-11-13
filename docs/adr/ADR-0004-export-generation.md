@@ -42,3 +42,44 @@ The PDF now embeds a subset of Arial (`app/fonts/ATS-Sans.ttf`, ~22 KB) covering
 - The on-screen preview uses the same separators and date formatting as the exporter, because it promises to mirror the download.
 
 Structural ATS properties are also asserted by tests: no tables, no images, no header or footer text, real Word heading and list styles, standard section headings, and no empty section headings.
+
+## Amendment: the ATS check panel
+
+### What changed
+
+The resume editor now shows a live readiness score and a list of specific
+issues (`web/src/ats.ts`, rendered by `AtsPanel` in `ResumeEditor.tsx`).
+
+### Why
+
+The layout is safe by construction, so the remaining reasons a resume gets
+filtered are about *content*: no email, no skills, no numbers in any bullet,
+a role with no dates. Users previously discovered these only after exporting
+and uploading somewhere else. Surfacing them while editing is the difference
+between a builder that produces a file and one that produces a file that
+works.
+
+### What it checks
+
+Only things that map to real parser or recruiter behaviour, never style
+preferences: missing name, email, or skills; an email that will not parse; no
+summary; no roles; no quantified bullets; per-role missing company, role,
+dates, or bullets; an over-long entry; missing education; links without a
+scheme.
+
+Each finding has a level (error, warning, tip) and states what to do about it.
+The score is `100 - 25·errors - 8·warnings`, floored at zero. It is a
+readiness signal, not a grade, and the panel says so.
+
+### Consequences
+
+- The checks are advisory. Nothing blocks an export, because the user may have
+  a legitimate reason to send an unconventional resume, and blocking would be
+  patronising.
+- The score is computed in the browser from content already loaded, so it
+  updates as you type with no request.
+- A test asserts the panel is responsive rather than decorative: an empty
+  resume scores 0 with five issues, and adding a name raises the score and
+  removes that issue. A score that is always 100 would be worthless.
+- The panel also lists the fixed layout guarantees, so the user can trust the
+  export without having to verify it themselves.
