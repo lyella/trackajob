@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import Resume, ResumeVersion, User
-from app.schemas import ResumeContent, ResumeCreate, ResumeOut, ResumeVersionMeta
+from app.models import JobPost, Resume, ResumeVersion, User
+from app.schemas import (
+    ResumeContent,
+    ResumeCreate,
+    ResumeOut,
+    ResumeRename,
+    ResumeVersionMeta,
+)
 
 router = APIRouter(prefix="/api/resumes", tags=["resumes"])
 
@@ -96,6 +102,43 @@ def list_versions(
         ResumeVersionMeta(version=v.version, created_at=v.created_at.isoformat())
         for v in _versions(db, resume.id)
     ]
+
+
+@router.patch("/{resume_id}")
+def rename_resume(
+    resume_id: int,
+    payload: ResumeRename,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ResumeOut:
+    """Renaming is metadata only: it never creates a version, because the
+    name is not part of the resume content and must not pollute the diff."""
+    resume = _owned_resume(db, user, resume_id)
+    resume.name = payload.name
+    db.commit()
+    return _resume_out(db, resume)
+
+
+@router.delete("/{resume_id}", status_code=204)
+def delete_resume(
+    resume_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Removes the resume and its whole version history. Applications that
+    pointed at one of those versions keep their record but lose the link,
+    which is what the UI reports before the delete is confirmed."""
+    resume = _owned_resume(db, user, resume_id)
+    version_ids = [v.id for v in _versions(db, resume.id)]
+    if version_ids:
+        db.execute(
+            update(JobPost)
+            .where(JobPost.resume_version_id.in_(version_ids))
+            .values(resume_version_id=None)
+        )
+        db.execute(delete(ResumeVersion).where(ResumeVersion.resume_id == resume.id))
+    db.delete(resume)
+    db.commit()
 
 
 @router.put("/{resume_id}/versions/{version}")

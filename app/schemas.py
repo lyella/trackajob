@@ -66,6 +66,10 @@ class ResumeCreate(BaseModel):
     content: ResumeContent
 
 
+class ResumeRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
 class ResumeVersionMeta(BaseModel):
     version: int
     created_at: str
@@ -98,6 +102,9 @@ class JobCreate(BaseModel):
     url: str = Field(default="", max_length=500)
     description: str = Field(default="", max_length=50000)
     notes: str = Field(default="", max_length=10000)
+    # Optional opening status, so a job applied to an hour ago is not
+    # recorded as "interested" first. Defaults to interested.
+    status: JOB_STATUSES = "interested"
 
 
 class JobUpdate(BaseModel):

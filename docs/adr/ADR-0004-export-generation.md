@@ -29,3 +29,16 @@ Reasons:
 - The template exists twice in effect: the React component for editing and preview, and a server side HTML version used for PDF and PNG. They must be kept in sync, and visual diffs against sample resumes are part of the export tests.
 - DOCX generation uses a Python document library (for example python-docx) writing real Word styles, not an HTML-to-DOCX conversion.
 - Server load for exports is modest but real, so exports are authenticated and rate limited per user.
+
+## Amendment: ATS text fidelity (PDF fonts)
+
+The first PDF implementation used the PDF core fonts (Helvetica), which are latin-1 only. Any character outside latin-1 was silently replaced with `?` before drawing. That destroyed exactly the text an ATS reads: `€`, `—`, `’`, and every accented name (`José`, `Müller`, `Zürich`). The file looked correct to a human because the glyphs that remained were fine, and the original export test passed because it only asserted ASCII content.
+
+The PDF now embeds a subset of Arial (`app/fonts/ATS-Sans.ttf`, ~22 KB) covering Latin-1, Latin Extended-A, and common punctuation. Consequences:
+
+- No system fonts are required at runtime, which matters because Vercel functions ship none.
+- The subset is a generated artifact. Regenerate it with fontTools if the glyph coverage ever needs to grow; it is committed because the build has no font step.
+- Tests extract text with pypdf, an independent parser, and assert that accented names, currency, and dashes survive. They were verified to fail against the old latin-1 path, so they are regression guards rather than assertions that happen to pass.
+- The on-screen preview uses the same separators and date formatting as the exporter, because it promises to mirror the download.
+
+Structural ATS properties are also asserted by tests: no tables, no images, no header or footer text, real Word heading and list styles, standard section headings, and no empty section headings.

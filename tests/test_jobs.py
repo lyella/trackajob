@@ -38,8 +38,15 @@ def test_create_list_and_invalid_status(client, new_email):
     jobs = client.get("/api/jobs").json()
     assert [j["id"] for j in jobs] == [body["id"]]
 
-    r = client.post("/api/jobs", json={"title": "Whatever", "status": "applied"})
-    assert r.status_code == 422, "status is not accepted on create"
+    # A job saved after it was already applied to can open in that status;
+    # the history still starts there rather than inventing an "interested".
+    r = client.post("/api/jobs", json={"title": "Applied already", "status": "applied"})
+    assert r.status_code == 201
+    assert r.json()["status"] == "applied"
+    assert [h["status"] for h in r.json()["status_history"]] == ["applied"]
+
+    r = client.post("/api/jobs", json={"title": "Whatever", "statu": "applied"})
+    assert r.status_code == 422, "unknown fields are still rejected"
     r = client.patch(f"/api/jobs/{body['id']}", json={"status": "dreamjob"})
     assert r.status_code == 422, "invalid statuses must never be stored"
 
@@ -75,6 +82,25 @@ def test_notes_update(client, new_email):
     r = client.patch(f"/api/jobs/{jid}", json={"notes": "Recruiter call on Friday"})
     assert r.status_code == 200
     assert r.json()["notes"] == "Recruiter call on Friday"
+
+
+def test_get_single_job(client, new_email):
+    signup(client, new_email)
+    created = _make_job(client).json()
+    r = client.get(f"/api/jobs/{created['id']}")
+    assert r.status_code == 200, "fetching one saved job must not error"
+    assert r.json()["title"] == created["title"]
+
+
+def test_edits_advance_updated_at(client, new_email):
+    signup(client, new_email)
+    created = _make_job(client).json()
+    r = client.patch(f"/api/jobs/{created['id']}", json={"notes": "edited"})
+    assert r.status_code == 200
+    assert r.json()["updated_at"] >= created["updated_at"]
+    # The edit is timestamped in the history too, so the UI can show
+    # "last touched" without guessing from a clock-skewed client.
+    assert len(r.json()["status_history"]) >= 1
 
 
 def test_users_cannot_see_or_touch_other_users_jobs(client, new_email):

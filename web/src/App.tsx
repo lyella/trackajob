@@ -1,35 +1,32 @@
-import { useEffect, useState, useCallback } from 'react'
-import { api, ResumeOut, User } from './types'
-import { createStarterResume, ResumeEditor } from './ResumeEditor'
+import { useCallback, useEffect, useState } from 'react'
+import { api, errorMessage, ResumeOut, User } from './types'
+import { ResumeEditor } from './ResumeEditor'
+import { ResumesScreen } from './ResumesScreen'
 import { JobsPanel } from './JobsPanel'
+import { LoginScreen } from './LoginScreen'
+import { useRoute } from './router'
+import { Loading, ToastProvider, useToast } from './ui'
 
-function humanizeError(e: unknown): string {
-  const raw = e instanceof Error ? e.message : String(e)
-  const detail = raw.replace(/^Error:\s*/, '')
-  if (detail.includes('at least 8 characters'))
-    return 'Password must be at least 8 characters.'
-  if (detail.includes('valid email address') || detail.includes('value is not a valid email'))
-    return 'That email address does not look right.'
-  if (detail.includes('already registered'))
-    return 'That email is already registered. Try logging in.'
-  if (detail.includes('invalid email or password'))
-    return 'Email or password is incorrect.'
-  return detail
-}
+type ImportPayload = Record<string, string>
 
-export default function App() {
-  const [user, setUser] = useState<User | null>(null)
-  const [authChecked, setAuthChecked] = useState(false)
-  const [resumes, setResumes] = useState<ResumeOut[]>([])
-  const [editing, setEditing] = useState<ResumeOut | null>(null)
-  const [tab, setTab] = useState<'resumes' | 'jobs'>('resumes')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [pendingImport, setPendingImport] = useState<Record<string, string> | null>(null)
-  const consumeImport = useCallback(() => setPendingImport(null), [])
+function Shell({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
+  const { route, navigate, setApplicationQuery } = useRoute()
+  const [resumes, setResumes] = useState<ResumeOut[] | null>(null)
+  const [pendingImport, setPendingImport] = useState<ImportPayload | null>(null)
+  const toast = useToast()
+
+  const refreshResumes = useCallback(async () => {
+    try {
+      setResumes(await api<ResumeOut[]>('/api/resumes'))
+    } catch (e) {
+      toast(errorMessage(e), 'error')
+      setResumes([])
+    }
+  }, [toast])
+
+  useEffect(() => {
+    void refreshResumes()
+  }, [refreshResumes])
 
   // Bookmarklet handoff: a scraped page opens this app at #importing and
   // postMessages the job data once it finishes loading. The hash is the
@@ -38,192 +35,136 @@ export default function App() {
   useEffect(() => {
     function receiveImport(ev: MessageEvent) {
       if (window.location.hash !== '#importing') return
-      const data = ev.data as { type?: string; job?: Record<string, string> } | null
+      const data = ev.data as { type?: string; job?: ImportPayload } | null
       if (!data || data.type !== 'trackajob-import' || !data.job) return
-      history.replaceState(null, '', window.location.pathname)
+      try {
+        ev.source?.postMessage({ type: 'trackajob-import-ack' }, { targetOrigin: ev.origin })
+      } catch {
+        /* the opener may already be closed */
+      }
+      history.replaceState(null, '', '#/applications')
       setPendingImport(data.job)
+      navigate({ name: 'applications' }, { replace: true })
     }
     window.addEventListener('message', receiveImport)
     return () => window.removeEventListener('message', receiveImport)
-  }, [])
+  }, [navigate])
+
+  async function logout() {
+    await api('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    onSignedOut()
+  }
+
+  const activeTab = route.name === 'applications' ? 'applications' : 'resumes'
+
+  return (
+    <>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+      <header className="app-header">
+        <a
+          className="brand"
+          href="#/resumes"
+          onClick={(e) => {
+            e.preventDefault()
+            navigate({ name: 'resumes' })
+          }}
+        >
+          <span className="brand-mark" aria-hidden="true">
+            T
+          </span>
+          <span className="brand-name">TrackAJob</span>
+        </a>
+
+        <nav className="app-nav" aria-label="Main">
+          <a
+            className="nav-link"
+            href="#/resumes"
+            aria-current={activeTab === 'resumes' ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault()
+              navigate({ name: 'resumes' })
+            }}
+          >
+            Resumes
+            {resumes && resumes.length > 0 && <span className="nav-count">{resumes.length}</span>}
+          </a>
+          <a
+            className="nav-link"
+            href="#/applications"
+            aria-current={activeTab === 'applications' ? 'page' : undefined}
+            onClick={(e) => {
+              e.preventDefault()
+              navigate({ name: 'applications' })
+            }}
+          >
+            Applications
+          </a>
+        </nav>
+
+        <div className="app-header-right">
+          <span className="user-chip" title={user.email}>
+            <span className="user-email">{user.email}</span>
+          </span>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={logout}>
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      <main id="main">
+        {route.name === 'resume' ? (
+          <ResumeEditor
+            resumeId={route.id}
+            onClose={() => {
+              void refreshResumes()
+              navigate({ name: 'resumes' })
+            }}
+            onChanged={() => void refreshResumes()}
+          />
+        ) : route.name === 'applications' ? (
+          <JobsPanel
+            resumes={resumes ?? []}
+            pendingImport={pendingImport}
+            onImportConsumed={() => setPendingImport(null)}
+            statusFilter={route.status}
+            search={route.q ?? ''}
+            focusJobId={route.job}
+            onQueryChange={setApplicationQuery}
+          />
+        ) : (
+          <ResumesScreen
+            resumes={resumes}
+            onOpen={(id) => navigate({ name: 'resume', id })}
+            onChanged={refreshResumes}
+          />
+        )}
+      </main>
+    </>
+  )
+}
+
+export default function App() {
+  const [user, setUser] = useState<User | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   useEffect(() => {
     api<User>('/api/auth/me')
-      .then((u) => {
-        setUser(u)
-        return api<ResumeOut[]>('/api/resumes')
-      })
-      .then(setResumes)
+      .then(setUser)
       .catch(() => setUser(null))
       .finally(() => setAuthChecked(true))
   }, [])
 
-  async function refresh() {
-    setResumes(await api<ResumeOut[]>('/api/resumes'))
-  }
-
-  async function submit(mode: 'login' | 'signup') {
-    setBusy(true)
-    setError('')
-    try {
-      setUser(
-        await api<User>(`/api/auth/${mode}`, {
-          method: 'POST',
-          body: JSON.stringify({ email, password }),
-        })
-      )
-      await refresh()
-      setNotice('')
-    } catch (e) {
-      setError(humanizeError(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function logout() {
-    await api('/api/auth/logout', { method: 'POST' }).catch(() => {})
-    setUser(null)
-    setEditing(null)
-  }
-
-  if (!authChecked) {
-    return (
-      <main>
-        <p className="muted">Loading…</p>
-      </main>
-    )
-  }
-
-  if (!user) {
-    const canLogin = email.trim().length > 3 && password.length > 0
-    const canSignup = canLogin && password.length >= 8
-    return (
-      <main>
-        <h1>TrackAJob</h1>
-        <p className="muted">Track your applications. Tailor your resume to every job post.</p>
-        <form onSubmit={(e) => e.preventDefault()} noValidate>
-          <label>
-            Email
-            <input
-              type="email"
-              autoFocus
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              placeholder="at least 8 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {password.length > 0 && password.length < 8 && (
-              <small className="hint">
-                For sign up, use at least 8 characters ({8 - password.length} to go).
-              </small>
-            )}
-          </label>
-          <div className="actions">
-            <button
-              type="submit"
-              disabled={busy || !canLogin}
-              onClick={() => submit('login')}
-            >
-              {busy ? 'Checking…' : 'Log in'}
-            </button>
-            <button
-              type="button"
-              className="primary"
-              disabled={busy || !canSignup}
-              onClick={() => submit('signup')}
-            >
-              {busy ? 'Checking…' : 'Sign up'}
-            </button>
-          </div>
-        </form>
-        {error && <p className="form-error" role="alert">{error}</p>}
-      </main>
-    )
-  }
-
-  if (editing) {
-    return (
-      <ResumeEditor
-        resume={editing}
-        onClose={() => {
-          setEditing(null)
-          refresh()
-        }}
-      />
-    )
-  }
-
   return (
-    <main>
-      <h1>TrackAJob</h1>
-      <p className="muted">
-        Signed in as {user.email}. <button className="link" onClick={logout}>Log out</button>
-      </p>
-      {notice && <p className="notice">{notice}</p>}
-
-      <nav className="tabs">
-        <button className={tab === 'resumes' ? 'primary tab' : 'tab'} onClick={() => setTab('resumes')}>
-          Resumes
-        </button>
-        <button className={tab === 'jobs' ? 'primary tab' : 'tab'} onClick={() => setTab('jobs')}>
-          Applications
-        </button>
-      </nav>
-
-      {tab === 'jobs' ? (
-        <JobsPanel pendingImport={pendingImport} onImportConsumed={consumeImport} />
+    <ToastProvider>
+      {!authChecked ? (
+        <Loading label="Starting TrackAJob…" />
+      ) : user ? (
+        <Shell user={user} onSignedOut={() => setUser(null)} />
       ) : (
-        <>
-          <h2>Resumes</h2>
-          {resumes.length === 0 && <p className="muted">No resumes yet. Create your first one.</p>}
-          <ul className="resume-list">
-            {resumes.map((r) => (
-              <li key={r.id}>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setEditing(r)
-                  }}
-                >
-                  {r.name}
-                </a>{' '}
-                <small className="muted">(version {r.latest_version})</small>
-              </li>
-            ))}
-          </ul>
-          <button
-            className="primary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true)
-              setError('')
-              try {
-                const r = await createStarterResume(`Resume ${resumes.length + 1}`)
-                setEditing(r)
-              } catch (e) {
-                setError(humanizeError(e))
-              } finally {
-                setBusy(false)
-              }
-            }}
-          >
-            {busy ? 'Creating…' : 'New resume'}
-          </button>
-          {error && <p className="form-error" role="alert">{error}</p>}
-        </>
+        <LoginScreen onSignedIn={setUser} />
       )}
-    </main>
+    </ToastProvider>
   )
 }

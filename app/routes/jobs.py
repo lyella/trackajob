@@ -62,8 +62,8 @@ def create_job(
         url=payload.url,
         description=payload.description,
         notes=payload.notes,
-        status="interested",
-        status_history=json.dumps([{"status": "interested", "at": utcnow().isoformat()}]),
+        status=payload.status,
+        status_history=json.dumps([{"status": payload.status, "at": utcnow().isoformat()}]),
     )
     db.add(job)
     db.commit()
@@ -88,7 +88,7 @@ def list_jobs(
 def get_job(
     job_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> JobOut:
-    return _job_out(_owned_job(db, user, job_id))
+    return _job_out(db, _owned_job(db, user, job_id))
 
 
 @router.patch("/{job_id}")
@@ -120,6 +120,13 @@ def update_job(
     for field in ("title", "company", "source", "url", "description"):
         if field in data and data[field] is not None:
             setattr(job, field, data[field])
+    # updated_at is maintained by the model; the status history is the only
+    # place the UI can read a real "last touched" time from, so an edit that
+    # is not a status change still records a timestamped entry.
+    if any(k in data for k in ("title", "company", "source", "url", "description", "notes")):
+        history = json.loads(job.status_history)
+        history.append({"status": job.status, "at": utcnow().isoformat()})
+        job.status_history = json.dumps(history)
     db.commit()
     return _job_out(db, job)
 

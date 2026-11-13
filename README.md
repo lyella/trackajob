@@ -33,6 +33,29 @@ Frontend (Node 20+), in a second terminal:
 
 Runs at http://localhost:5173 with /api proxied to the backend.
 
+## Frontend structure
+
+- `web/src/App.tsx` app shell: header, nav, auth gate, bookmarklet handoff.
+- `web/src/router.ts` hash router. Every screen is a real URL
+  (`#/resumes`, `#/resumes/3`, `#/applications?status=applied&q=stripe`), so
+  refresh, Back/Forward, and shared links all work.
+- `web/src/ui.tsx` design primitives: buttons, fields with accessible
+  labels, toasts, confirm dialogs, empty states, status pills.
+- `web/src/styles.css` design tokens. Light and dark themes are one token
+  swap driven by `prefers-color-scheme`; motion is disabled under
+  `prefers-reduced-motion`.
+- `web/src/format.ts` all date and number formatting goes through `Intl`.
+
+## API surface the UI relies on
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `PATCH` | `/api/resumes/{id}` | Rename a resume (metadata only, no new version) |
+| `DELETE` | `/api/resumes/{id}` | Delete a resume and its versions, unlinking applications |
+| `GET` | `/api/resumes/{id}/export/{pdf,docx}?version=N` | Export the latest or a specific version |
+| `POST` | `/api/jobs` | Create a job, optionally with an opening `status` |
+| `GET` | `/api/jobs/{id}` | Fetch one saved job |
+
 ## Tailoring spike (cli/)
 
 Requires an OpenAI-compatible API key. Copy `.env.example` to `.env`, then:
