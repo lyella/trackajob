@@ -5,6 +5,9 @@ psycopg[binary]>=3.2
 pydantic-settings>=2.4
 httpx>=0.27
 fpdf2>=2.8
+# HTML parsing for job-post scraping (JSON-LD, Open Graph, site selectors).
+beautifulsoup4>=4.12
+lxml>=5.0
 # Pydantic EmailStr validation for signup
 email-validator>=2.0
 # Turso SQLAlchemy dialect. Native dependency ships for Linux/macOS only;

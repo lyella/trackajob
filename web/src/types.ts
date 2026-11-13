@@ -78,9 +78,15 @@ export class ApiError extends Error {
 }
 
 /** Turns FastAPI validation payloads (arrays of {msg, loc}) into one line a
- * person can act on, instead of "[object Object]" or a raw 422 body. */
+ * person can act on, instead of "[object Object]" or a raw 422 body.
+ * Also unwraps the {reason, message} shape the scraper returns, so a blocked
+ * job board explains itself instead of reading "HTTP 422". */
 function detailToMessage(detail: unknown, status: number): string {
   if (typeof detail === 'string') return detail
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    const shaped = detail as { message?: unknown; reason?: unknown }
+    if (typeof shaped.message === 'string' && shaped.message) return shaped.message
+  }
   if (Array.isArray(detail)) {
     const parts = detail
       .map((d) => {

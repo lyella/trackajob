@@ -121,6 +121,13 @@ export function JobsPanel({
   const bmRef = useRef<HTMLAnchorElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
+  // Paste-a-link import: the primary path. The bookmarklet stays available
+  // as a fallback for boards that block server-side fetching.
+  const [importUrl, setImportUrl] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState('')
+  const [importWarnings, setImportWarnings] = useState<string[]>([])
+
   const filter = (statusFilter ?? 'all') as JobStatus | 'all'
   const debouncedSearch = useDebounced(search, 150)
 
@@ -192,6 +199,58 @@ export function JobsPanel({
       window.setTimeout(() => setCopied(false), 4000)
     } catch {
       toast('Could not copy. Drag the button to your bookmarks bar instead.', 'error')
+    }
+  }
+
+  /** Fetches the posting server side and fills the form for review. Nothing
+   * is saved here: the user still confirms, so a bad scrape cannot pollute
+   * the tracker. */
+  async function importFromUrl(e?: FormEvent) {
+    e?.preventDefault()
+    const url = importUrl.trim()
+    if (!url || importing) return
+    setImporting(true)
+    setImportError('')
+    setImportWarnings([])
+    try {
+      const scraped = await api<{
+        title: string
+        company: string
+        location: string
+        description: string
+        url: string
+        source: string
+        salary: string
+        employment_type: string
+        posted: string
+        warnings: string[]
+      }>('/api/jobs/scrape', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      })
+      setForm({
+        title: (scraped.title || '').slice(0, 200),
+        company: (scraped.company || '').slice(0, 150),
+        source: (scraped.source || '').slice(0, 80),
+        url: (scraped.url || url).slice(0, 500),
+        description: (scraped.description || '').slice(0, 50000),
+        notes: '',
+        status: 'interested',
+      })
+      setImportWarnings(scraped.warnings ?? [])
+      setAddOpen(true)
+      toast(
+        scraped.title
+          ? `Imported “${scraped.title}”. Review and save.`
+          : 'Imported. Review the details and save.',
+        'success'
+      )
+    } catch (err) {
+      // The API returns {reason, message} so the UI can give a next step.
+      const message = errorMessage(err)
+      setImportError(message)
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -324,6 +383,7 @@ export function JobsPanel({
     <div className="page">
       <div className="page-head">
         <div>
+          <span className="eyebrow">Pipeline</span>
           <h1>Applications</h1>
           <p>Every job you are tracking, with the resume version you sent.</p>
         </div>
@@ -384,11 +444,61 @@ export function JobsPanel({
           </Button>
         </summary>
         <form className="add-form" onSubmit={addJob} noValidate>
-          <div className="bookmarklet-box">
+          {/* Primary path: paste a link and let the server read the posting. */}
+          <div className="import-bar">
+            <Field
+              label="Import from a link"
+              hint="Paste a job post URL and we fill in the details. Works on LinkedIn, Kalibrr, Greenhouse and most career sites."
+            >
+              {(p) => (
+                <input
+                  {...p}
+                  type="url"
+                  value={importUrl}
+                  onChange={(e) => setImportUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      void importFromUrl()
+                    }
+                  }}
+                  placeholder="https://www.linkedin.com/jobs/view/…"
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              )}
+            </Field>
+            <Button
+              variant="primary"
+              loading={importing}
+              disabled={!importUrl.trim()}
+              onClick={() => void importFromUrl()}
+            >
+              {importing ? 'Importing…' : 'Import'}
+            </Button>
+          </div>
+
+          <div className="import-hint">
+            <span>Supported:</span>
+            {['LinkedIn', 'Kalibrr', 'JobStreet', 'Indeed', 'Greenhouse', 'Lever', 'any career site'].map(
+              (board) => (
+                <span className="import-board" key={board}>
+                  {board}
+                </span>
+              )
+            )}
+          </div>
+
+          {importError && <Alert tone="warn">{importError}</Alert>}
+          {importWarnings.length > 0 && (
+            <Alert tone="info">{importWarnings.join(' ')}</Alert>
+          )}
+
+          <details className="bookmarklet-box">
+            <summary>Or save jobs with a bookmark</summary>
             <p>
-              <strong>Save jobs in one click.</strong> Drag the button below to your bookmarks
-              bar (show it with Ctrl+Shift+B), open a job on LinkedIn, Indeed, JobStreet or any
-              career site, then click the bookmark.
+              Drag the button below to your bookmarks bar (show it with Ctrl+Shift+B), open a
+              job on any site, then click the bookmark.
             </p>
             <a
               ref={bmRef}
@@ -406,7 +516,7 @@ export function JobsPanel({
                 ? 'Copied. Create a new bookmark and paste it as the URL.'
                 : 'Prefer not to drag? Click the button to copy the code, then add a bookmark and paste it as the URL.'}
             </p>
-          </div>
+          </details>
 
           <div className="field-grid">
             <Field label="Role title" error={formError && !form.title.trim() ? formError : undefined}>
