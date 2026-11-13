@@ -295,3 +295,92 @@ def test_smtp_failure_raises_a_friendly_error(monkeypatch):
     monkeypatch.setattr(get_settings(), "smtp_port", 1, raising=False)
     with pytest.raises(emailer.EmailError):
         emailer.send(emailer.verification_email("a@example.com", "http://x", 24))
+
+
+# --------------------------------------------------------------------------
+# Development link fallback
+#
+# When no mail provider is configured the API can return the action link so
+# the UI can show it. The rules that matter: it is on outside production, it
+# is OFF in production unless explicitly enabled, and it is never returned
+# from forgot-password (which would leak whether an account exists).
+# --------------------------------------------------------------------------
+
+
+def test_link_fallback_is_active_outside_production(client, new_email, sent):
+    r = signup(client, new_email)
+    assert r.status_code == 201
+    link = r.json().get("verification_link")
+    assert link, "development should return the verification link"
+    assert "/#/verify-email?token=" in link
+
+
+def test_link_fallback_is_off_in_production(client, new_email, sent, monkeypatch):
+    """The most important assertion here: a public deployment must not hand
+    out a working verification link to whoever asked."""
+    monkeypatch.setenv("VERCEL", "1")
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setattr(get_settings(), "turnstile_secret", "s", raising=False)
+        monkeypatch.setattr(captcha.httpx, "post", lambda *a, **k: _ok_captcha())
+        r = client.post(
+            "/api/auth/signup",
+            json={"email": new_email, "password": "correct horse battery staple", "captcha_token": "t"},
+        )
+        assert r.status_code == 201
+        assert r.json().get("verification_link") == "", "production must not leak the link"
+    finally:
+        monkeypatch.delenv("VERCEL", raising=False)
+        get_settings.cache_clear()
+
+
+def test_link_fallback_can_be_enabled_in_production(client, new_email, sent, monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setattr(get_settings(), "turnstile_secret", "s", raising=False)
+        monkeypatch.setattr(get_settings(), "allow_link_fallback", True, raising=False)
+        monkeypatch.setattr(captcha.httpx, "post", lambda *a, **k: _ok_captcha())
+        r = client.post(
+            "/api/auth/signup",
+            json={"email": new_email, "password": "correct horse battery staple", "captcha_token": "t"},
+        )
+        assert r.status_code == 201
+        assert r.json().get("verification_link"), "explicit opt-in should expose the link"
+    finally:
+        monkeypatch.delenv("VERCEL", raising=False)
+        get_settings.cache_clear()
+
+
+def test_link_fallback_is_absent_once_a_provider_is_configured(client, new_email, sent, monkeypatch):
+    monkeypatch.setattr(get_settings(), "email_driver", "resend", raising=False)
+    monkeypatch.setattr(get_settings(), "resend_api_key", "test", raising=False)
+    monkeypatch.setattr(emailer, "_send_resend", lambda message: None)
+    r = signup(client, new_email)
+    assert r.status_code == 201
+    assert r.json().get("verification_link") == "", "a real send must not echo the link"
+
+
+def test_forgot_password_never_returns_a_link(client, new_email, sent):
+    """Returning a link here would reveal that the account exists."""
+    signup(client, new_email)
+    sent.clear()
+    known = client.post("/api/auth/forgot-password", json={"email": new_email})
+    unknown = client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
+    assert known.json() == unknown.json()
+    body = str(known.json())
+    # Assert on the substance: no URL and no token in the response.
+    assert "token=" not in body
+    assert "http" not in body
+    assert "reset-password" not in body
+
+
+def test_config_reports_delivery_mode(client):
+    assert client.get("/api/auth/config").json()["delivery"] == "exposed"
+
+
+class _ok_captcha:
+    status_code = 200
+
+    def json(self):
+        return {"success": True}

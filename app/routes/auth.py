@@ -28,6 +28,7 @@ from app.schemas import (
     ResetPasswordIn,
     ResendVerificationIn,
     SignupIn,
+    SignupOut,
     UserOut,
     VerifyEmailIn,
 )
@@ -71,7 +72,9 @@ def _check_captcha(token: str | None, request: Request) -> None:
         raise HTTPException(status_code=exc.status, detail=exc.message)
 
 
-def _send_verification(db: Session, user: User) -> None:
+def _send_verification(db: Session, user: User) -> str:
+    """Issue and send a verification link. Returns the link only when the
+    caller is allowed to show it (see emailer.delivery_mode)."""
     settings = get_settings()
     raw = issue_token(db, user.id, VERIFY, timedelta(hours=settings.verify_token_hours))
     link = f"{settings.app_base_url.rstrip('/')}/#/verify-email?token={raw}"
@@ -81,6 +84,7 @@ def _send_verification(db: Session, user: User) -> None:
         # The account exists and the token is stored; only delivery failed.
         # Say so plainly rather than pretending the email went out.
         raise HTTPException(status_code=503, detail=str(exc))
+    return link if emailer.link_delivery_allowed() else ""
 
 
 @router.get("/config")
@@ -91,6 +95,9 @@ def auth_config() -> dict:
         "captcha_enabled": captcha.enabled(),
         "captcha_site_key": settings.turnstile_site_key if captcha.enabled() else "",
         "email_driver": settings.email_driver,
+        # "email" | "exposed" | "none". The UI uses this to decide whether it
+        # can show a link and what to tell the user about delivery.
+        "delivery": emailer.delivery_mode(),
     }
 
 
@@ -100,7 +107,7 @@ def signup(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> UserOut:
+) -> SignupOut:
     _check_captcha(payload.captcha_token, request)
 
     email = payload.email.lower().strip()
@@ -119,8 +126,13 @@ def signup(
     # broken mail provider must not lock a new user out of their own data.
     token = create_session(db, user.id)
     _set_session_cookie(response, token)
-    _send_verification(db, user)
-    return _user_out(user)
+    link = _send_verification(db, user)
+    return SignupOut(
+        id=user.id,
+        email=user.email,
+        email_verified=False,
+        verification_link=link,
+    )
 
 
 @router.post("/login")
@@ -184,8 +196,8 @@ def resend_verification(
     _check_captcha(payload.captcha_token, request)
     if user.email_verified:
         raise HTTPException(status_code=409, detail="That email is already verified.")
-    _send_verification(db, user)
-    return {"status": "sent"}
+    link = _send_verification(db, user)
+    return {"status": "sent", "verification_link": link}
 
 
 # --------------------------------------------------------------------------
@@ -204,6 +216,10 @@ def forgot_password(
     Telling a caller "no account with that email" turns this endpoint into an
     account-enumeration oracle, so the response is identical whether or not
     the address exists. The email is only sent when there is an account.
+
+    The development link fallback is deliberately NOT returned here: handing
+    back a link only when the account exists would leak exactly the fact this
+    endpoint works to hide. Use the server log instead.
     """
     _check_captcha(payload.captcha_token, request)
 

@@ -1711,6 +1711,36 @@ details.job-desc > summary:hover { color: var(--ink); }
   margin-top: 0.1rem;
 }
 
+/* Development-only panel shown when no mail provider is configured. It is
+   deliberately styled as a caution, not as a normal success state. */
+.dev-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--marker);
+  color: var(--marker-ink);
+  border: var(--bw) solid var(--rule-strong);
+  border-radius: var(--r-sm);
+  text-align: center;
+}
+
+.dev-link-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.dev-link-body {
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.dev-link .link-btn {
+  color: var(--marker-ink);
+  font-size: 0.78rem;
+}
+
 .auth-wrap {
   position: relative;
   min-height: 100dvh;

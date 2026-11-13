@@ -123,6 +123,28 @@ def send(message: Message) -> str:
     raise EmailError(f"Unknown email driver: {driver}")
 
 
+def delivery_mode() -> str:
+    """How a user will actually receive a link.
+
+    - ``email``: a real provider is configured, so the link arrives by email.
+    - ``exposed``: the console driver is active and the caller may return the
+      link to the browser (development, or an explicit production opt-in).
+    - ``none``: console driver in production without the opt-in. The link is
+      only in the server log, and the UI says so rather than pretending.
+    """
+    settings = get_settings()
+    if settings.email_driver != "console":
+        return "email"
+    if not settings.is_production or settings.allow_link_fallback:
+        return "exposed"
+    return "none"
+
+
+def link_delivery_allowed() -> bool:
+    """Whether an API response may include the raw action link."""
+    return delivery_mode() == "exposed"
+
+
 # --------------------------------------------------------------------------
 # Message templates
 # --------------------------------------------------------------------------

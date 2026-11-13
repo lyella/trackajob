@@ -47,6 +47,17 @@ class UserOut(BaseModel):
     email_verified: bool = True
 
 
+class SignupOut(UserOut):
+    """Signup response.
+
+    ``verification_link`` is populated only when no mail provider is
+    configured and the deployment allows the fallback (development, or an
+    explicit production opt-in). It is empty whenever a real email was sent.
+    """
+
+    verification_link: str = ""
+
+
 class LinkEntry(BaseModel):
     label: str
     url: str

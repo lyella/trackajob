@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # "resend" uses the Resend HTTP API.
     email_driver: str = "console"
     email_from: str = "TrackAJob <no-reply@trackajob.local>"
+    # Development affordance: when the console driver is active, return the
+    # verification / reset link in the API response so the UI can show it.
+    # Allowed automatically outside production. In production it must be
+    # switched on explicitly, because it hands a working reset link to
+    # whoever asked for it.
+    allow_link_fallback: bool = False
 
     smtp_host: str = ""
     smtp_port: int = 587

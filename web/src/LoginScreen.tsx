@@ -20,7 +20,16 @@ function humanizeAuthError(message: string): string {
   return message
 }
 
-export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
+export function LoginScreen({
+  onSignedIn,
+  onContinue,
+}: {
+  onSignedIn: (user: User) => void
+  /** Re-reads the session. Used after a signup where the account was created
+   * and signed in server side, but the UI stayed here to show the
+   * verification link. */
+  onContinue: () => void
+}) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -28,6 +37,9 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  // Set when no mail provider is configured and the API hands the link back,
+  // so the user is not stuck waiting for an email that will never arrive.
+  const [devLink, setDevLink] = useState<string | null>(null)
 
   const captchaConfig = useCaptchaConfig()
   const { theme } = useTheme()
@@ -40,6 +52,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
     setMode(next)
     setError('')
     setNotice('')
+    setDevLink(null)
     setPassword('')
     resetCaptcha(setCaptchaToken)
   }
@@ -50,6 +63,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
     setBusy(true)
     setError('')
     setNotice('')
+    setDevLink(null)
     try {
       if (mode === 'forgot') {
         await api('/api/auth/forgot-password', {
@@ -64,7 +78,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
         return
       }
 
-      const user = await api<User>(`/api/auth/${mode}`, {
+      const user = await api<User & { verification_link?: string }>(`/api/auth/${mode}`, {
         method: 'POST',
         body: JSON.stringify({
           email: email.trim(),
@@ -72,6 +86,13 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
           captcha_token: captchaToken,
         }),
       })
+      if (user.verification_link) {
+        // No mail provider is configured: show the link instead of sending
+        // the user to an inbox that will never receive anything.
+        setDevLink(user.verification_link)
+        setNotice('Account created. Confirm your email using the link below.')
+        return
+      }
       onSignedIn(user)
     } catch (err) {
       setError(humanizeAuthError(errorMessage(err)))
@@ -190,7 +211,23 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
           )}
 
           {error && <Alert tone="error">{error}</Alert>}
-          {notice && <Alert tone="success">{notice}</Alert>}
+          {notice && !devLink && <Alert tone="success">{notice}</Alert>}
+
+          {devLink && (
+            <div className="dev-link">
+              <p className="dev-link-title">Email delivery is not configured</p>
+              <p className="dev-link-body">
+                No mail provider is set up, so this link is shown here instead of being
+                emailed. Open it to confirm your address.
+              </p>
+              <a className="btn btn-primary btn-block" href={devLink}>
+                Confirm my email
+              </a>
+              <button type="button" className="link-btn" onClick={onContinue}>
+                Skip for now and continue
+              </button>
+            </div>
+          )}
 
           <Button type="submit" variant="primary" block loading={busy} disabled={!canSubmit}>
             {busy

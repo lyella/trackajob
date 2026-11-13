@@ -278,7 +278,7 @@ export default function App() {
             onUserChanged={refreshUser}
           />
         ) : (
-          <LoginScreen onSignedIn={setUser} />
+          <LoginScreen onSignedIn={setUser} onContinue={refreshUser} />
         )}
       </ToastProvider>
     </ThemeProvider>
