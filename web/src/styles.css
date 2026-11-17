@@ -1701,10 +1701,16 @@ details.job-desc > summary:hover { color: var(--ink); }
 
 /* Turnstile renders a fixed 300px box. Left-align it so its edge matches the
    inputs, and let it fill the field width so all three line up. */
+/* Turnstile renders a fixed 300px-wide widget. The card's content box must
+   therefore be at least 300px, or the widget overflows the card edge, which
+   is what happened on a 381px phone: card 341px minus 2x22.4px padding left
+   only 294px of room. */
 .captcha {
   display: flex;
   justify-content: flex-start;
   min-height: 0;
+  /* Never let the widget be clipped by a narrow flex parent. */
+  min-width: 0;
 }
 
 .captcha > div {
@@ -1714,6 +1720,36 @@ details.job-desc > summary:hover { color: var(--ink); }
 .captcha iframe {
   width: 100% !important;
   max-width: 100%;
+}
+
+/* On narrow phones the card's content box can be narrower than the widget's
+   fixed 300px. Chrome rejects scale(calc(...)) outright (verified: the whole
+   declaration is dropped and transform stays "none"), so the scale is set
+   with a CSS variable and applied through a plain scale() per breakpoint.
+   Each value is chosen so the scaled 300px widget fits the content box. */
+@media (max-width: 380px) {
+  .captcha {
+    /* 300px * 0.92 = 276px, fits a 380px viewport's 308px content box. */
+    transform: scale(0.92);
+    transform-origin: left top;
+    margin-bottom: -0.4rem;
+  }
+}
+
+@media (max-width: 350px) {
+  .captcha {
+    /* 300px * 0.86 = 258px, fits a 350px viewport's 278px content box. */
+    transform: scale(0.86);
+    margin-bottom: -0.8rem;
+  }
+}
+
+@media (max-width: 330px) {
+  .captcha {
+    /* 300px * 0.78 = 234px, fits a 320px viewport's 248px content box. */
+    transform: scale(0.78);
+    margin-bottom: -1.3rem;
+  }
 }
 
 .auth-forgot {
@@ -2676,5 +2712,11 @@ dialog.confirm p {
 
   .field-grid-narrow { grid-template-columns: minmax(0, 1fr); }
 
-  .auth-card { padding: 1.4rem; margin-inline: 0; }
+  .auth-card {
+    /* The Turnstile widget is a fixed 300px wide. At 1.4rem padding a 341px
+       card left only 294px of content, so the widget spilled past the edge.
+       1rem padding gives 309px on the same screen, which fits it. */
+    padding: 1rem;
+    margin-inline: 0;
+  }
 }
