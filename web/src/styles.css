@@ -1699,16 +1699,45 @@ details.job-desc > summary:hover { color: var(--ink); }
 .verify-banner-text { flex: 1 1 20rem; min-width: 0; }
 .verify-banner-error { color: var(--danger); font-weight: 500; }
 
+/* Turnstile renders a fixed 300px box. Left-align it so its edge matches the
+   inputs, and let it fill the field width so all three line up. */
 .captcha {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   min-height: 0;
+}
+
+.captcha > div {
+  width: 100%;
+}
+
+.captcha iframe {
+  width: 100% !important;
+  max-width: 100%;
 }
 
 .auth-forgot {
   align-self: center;
   font-size: 0.82rem;
   margin-top: 0.1rem;
+}
+
+/* Destructive actions sit apart from the primary flow, with a rule above so
+   they are never mistaken for a normal button. */
+.danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: var(--bw) solid var(--rule);
+}
+
+.danger-zone p {
+  flex: 1 1 12rem;
+  margin: 0;
 }
 
 /* Development-only panel shown when no mail provider is configured. It is

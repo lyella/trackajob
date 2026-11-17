@@ -41,6 +41,13 @@ class ResendVerificationIn(BaseModel):
     captcha_token: str | None = Field(default=None, max_length=4096)
 
 
+class DeleteAccountIn(BaseModel):
+    """Deleting an account requires the password, so a borrowed session
+    cannot erase someone's data."""
+
+    password: str = Field(min_length=1, max_length=128)
+
+
 class UserOut(BaseModel):
     id: int
     email: str

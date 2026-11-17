@@ -8,7 +8,7 @@ import { LoginScreen } from './LoginScreen'
 import { StatsScreen } from './StatsScreen'
 import { useRoute } from './router'
 import { ThemeProvider, ThemeToggle } from './theme'
-import { Alert, Button, ConfirmDialog, Loading, ToastProvider, useToast } from './ui'
+import { Alert, Button, ConfirmDialog, Field, Loading, ToastProvider, useToast } from './ui'
 
 /** Password help for a signed-in user.
  *
@@ -18,16 +18,29 @@ import { Alert, Button, ConfirmDialog, Loading, ToastProvider, useToast } from '
  * returns a link, because that would tell a stranger whether an account
  * exists.
  */
-function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function PasswordDialog({
+  open,
+  onClose,
+  onDeleted,
+}: {
+  open: boolean
+  onClose: () => void
+  onDeleted: () => void
+}) {
   const [link, setLink] = useState('')
   const [expires, setExpires] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!open) {
       setLink('')
       setError('')
+      setConfirmDelete(false)
+      setDeletePassword('')
     }
   }, [open])
 
@@ -51,6 +64,54 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
     } finally {
       setBusy(false)
     }
+  }
+
+  async function deleteAccount() {
+    setDeleting(true)
+    setError('')
+    try {
+      await api('/api/auth/account', {
+        method: 'DELETE',
+        body: JSON.stringify({ password: deletePassword }),
+      })
+      onDeleted()
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  if (confirmDelete) {
+    return (
+      <ConfirmDialog
+        open={open}
+        title="Delete your account?"
+        confirmLabel="Delete everything"
+        cancelLabel="Keep my account"
+        busy={deleting}
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={deleteAccount}
+      >
+        <p>
+          This permanently deletes your account, every resume and version, every application and
+          note, and your usage history. It cannot be undone.
+        </p>
+        <Field label="Confirm your password">
+          {(p) => (
+            <input
+              {...p}
+              type="password"
+              autoComplete="current-password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              autoFocus
+            />
+          )}
+        </Field>
+        {error && <Alert tone="error">{error}</Alert>}
+      </ConfirmDialog>
+    )
   }
 
   return (
@@ -82,6 +143,15 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
         </p>
       )}
       {error && <Alert tone="error">{error}</Alert>}
+
+      <div className="danger-zone">
+        <p className="small muted">
+          Deleting your account removes all your data. This cannot be undone.
+        </p>
+        <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
+          Delete my account
+        </Button>
+      </div>
     </ConfirmDialog>
   )
 }
@@ -266,7 +336,14 @@ function Shell({
         </div>
       </header>
 
-      <PasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
+      <PasswordDialog
+        open={passwordOpen}
+        onClose={() => setPasswordOpen(false)}
+        onDeleted={() => {
+          setPasswordOpen(false)
+          onSignedOut()
+        }}
+      />
 
       <main id="main">
         {user.email_verified === false && (

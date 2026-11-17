@@ -10,6 +10,25 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+class RateLimitHit(Base):
+    """One row per counted attempt, used to throttle auth endpoints.
+
+    Counted in the database rather than in memory because Vercel functions
+    are stateless: an in-process counter resets on every cold start and is
+    not shared between instances, so it would not actually throttle anyone.
+
+    Rows age out and are pruned opportunistically, so the table stays small
+    without needing a scheduled job.
+    """
+
+    __tablename__ = "rate_limit_hits"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # "<bucket>:<subject>", e.g. "login:203.0.113.5" or "forgot:user@example.com"
+    key: Mapped[str] = mapped_column(String(255), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, index=True, default=utcnow)
+
+
 class User(Base):
     __tablename__ = "users"
 

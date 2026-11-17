@@ -2,10 +2,10 @@ import os
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app import captcha, emailer
+from app import captcha, emailer, ratelimit
 from app.auth import (
     RESET,
     VERIFY,
@@ -21,8 +21,19 @@ from app.auth import (
 from app.config import get_settings
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import User, utcnow
+from app.models import (
+    AuthToken,
+    JobPost,
+    RateLimitHit,
+    Resume,
+    ResumeVersion,
+    SessionToken,
+    TailorUsage,
+    User,
+    utcnow,
+)
 from app.schemas import (
+    DeleteAccountIn,
     ForgotPasswordIn,
     LoginIn,
     ResetPasswordIn,
@@ -72,6 +83,22 @@ def _check_captcha(token: str | None, request: Request) -> None:
         raise HTTPException(status_code=exc.status, detail=exc.message)
 
 
+def _limit(db: Session, bucket: str, *subjects: str) -> None:
+    """Raise 429 with a Retry-After header when a bucket is exhausted."""
+    try:
+        ratelimit.check(db, bucket, *subjects)
+    except ratelimit.RateLimited as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Too many attempts. Wait a few minutes and try again."
+                if exc.retry_after >= 120
+                else "Too many attempts. Wait a moment and try again."
+            ),
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+
+
 def _send_verification(db: Session, user: User) -> str:
     """Issue and send a verification link. Returns the link only when the
     caller is allowed to show it (see emailer.delivery_mode)."""
@@ -108,7 +135,10 @@ def signup(
     response: Response,
     db: Session = Depends(get_db),
 ) -> SignupOut:
+    ip = _client_ip(request) or "unknown"
+    _limit(db, "signup", ip)
     _check_captcha(payload.captcha_token, request)
+    ratelimit.record(db, "signup", ip)
 
     email = payload.email.lower().strip()
     existing = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
@@ -142,12 +172,23 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> UserOut:
+    ip = _client_ip(request) or "unknown"
+    email_key = payload.email.lower().strip()
+    # Two ceilings. The per-address limit is the strict one; the per-IP
+    # ceiling is loose on purpose so people sharing an office or mobile
+    # carrier address do not lock each other out.
+    _limit(db, "login", email_key)
+    _limit(db, "login_ip", ip)
     _check_captcha(payload.captcha_token, request)
 
-    email = payload.email.lower().strip()
-    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    user = db.execute(select(User).where(User.email == email_key)).scalar_one_or_none()
     if user is None or not verify_password(payload.password, user.password_hash):
+        ratelimit.record(db, "login", email_key)
+        ratelimit.record(db, "login_ip", ip)
         raise HTTPException(status_code=401, detail="invalid email or password")
+
+    # A successful login clears the slate, so a few typos do not linger.
+    ratelimit.clear(db, "login", email_key)
     token = create_session(db, user.id)
     _set_session_cookie(response, token)
     return _user_out(user)
@@ -196,6 +237,8 @@ def resend_verification(
     _check_captcha(payload.captcha_token, request)
     if user.email_verified:
         raise HTTPException(status_code=409, detail="That email is already verified.")
+    _limit(db, "resend", f"acct:{user.email}")
+    ratelimit.record(db, "resend", f"acct:{user.email}")
     link = _send_verification(db, user)
     return {"status": "sent", "verification_link": link}
 
@@ -226,7 +269,13 @@ def forgot_password(
     _check_captcha(payload.captcha_token, request)
 
     settings = get_settings()
+    ip = _client_ip(request) or "unknown"
     email = payload.email.lower().strip()
+    # Limit per IP and per address. The per-address check runs after the
+    # captcha so it cannot be used to probe whether an address exists.
+    _limit(db, "forgot", ip, f"acct:{email}")
+    ratelimit.record(db, "forgot", ip, f"acct:{email}")
+
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
     if user is not None:
         raw = issue_token(db, user.id, RESET, timedelta(minutes=settings.reset_token_minutes))
@@ -261,12 +310,61 @@ def reset_link_for_signed_in_user(
     }
 
 
+@router.delete("/account", status_code=204)
+def delete_account(
+    payload: DeleteAccountIn,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete the account and everything belonging to it.
+
+    PRD acceptance criterion 6, and the data-protection expectation that a
+    user can take their data with them or remove it.
+
+    Every table is cleared explicitly rather than relying on cascade rules,
+    because the schema uses plain foreign keys without ON DELETE CASCADE:
+    a missed table would silently orphan rows containing personal data.
+    The password is required so a borrowed session cannot erase the account.
+    """
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="That password is not correct.")
+
+    version_ids = [
+        row[0]
+        for row in db.execute(
+            select(ResumeVersion.id).join(Resume, Resume.id == ResumeVersion.resume_id).where(
+                Resume.user_id == user.id
+            )
+        ).all()
+    ]
+
+    # Jobs first: they reference resume versions.
+    db.execute(delete(JobPost).where(JobPost.user_id == user.id))
+    if version_ids:
+        db.execute(delete(ResumeVersion).where(ResumeVersion.id.in_(version_ids)))
+    db.execute(delete(Resume).where(Resume.user_id == user.id))
+    db.execute(delete(TailorUsage).where(TailorUsage.user_id == user.id))
+    db.execute(delete(AuthToken).where(AuthToken.user_id == user.id))
+    db.execute(delete(SessionToken).where(SessionToken.user_id == user.id))
+    db.execute(delete(RateLimitHit).where(RateLimitHit.key.like(f"%:{user.email}")))
+    db.delete(user)
+    db.commit()
+
+    response.delete_cookie(key=SESSION_COOKIE, path="/")
+
+
 @router.post("/reset-password")
 def reset_password(
     payload: ResetPasswordIn,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> dict:
+    ip = _client_ip(request) or "unknown"
+    _limit(db, "reset", ip)
+    ratelimit.record(db, "reset", ip)
+
     user = consume_token(db, payload.token, RESET)
     if user is None:
         raise HTTPException(
