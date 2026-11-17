@@ -1699,57 +1699,48 @@ details.job-desc > summary:hover { color: var(--ink); }
 .verify-banner-text { flex: 1 1 20rem; min-width: 0; }
 .verify-banner-error { color: var(--danger); font-weight: 500; }
 
-/* Turnstile renders a fixed 300px box. Left-align it so its edge matches the
-   inputs, and let it fill the field width so all three line up. */
-/* Turnstile renders a fixed 300px-wide widget. The card's content box must
-   therefore be at least 300px, or the widget overflows the card edge, which
-   is what happened on a 381px phone: card 341px minus 2x22.4px padding left
-   only 294px of room. */
+/* Turnstile renders a fixed 300px-wide widget and lays its contents out for
+   exactly that size. Setting width:100% on the container only adds dead space
+   on the right, because the inner layout does not reflow. That was the bug:
+   the box looked full width while the content sat in the left 300px.
+
+   The fix is to scale the widget itself. The card's content box is 326px at
+   its widest, so 326/300 = 1.0867. The container reserves the scaled height
+   so the scale does not leave a gap above the button.
+
+   Chrome rejects scale(calc(...)) outright (the declaration is dropped and
+   transform stays "none"), so each breakpoint uses a plain number. */
 .captcha {
   display: flex;
   justify-content: flex-start;
-  min-height: 0;
-  /* Never let the widget be clipped by a narrow flex parent. */
   min-width: 0;
+  /* Reserve the scaled height (65px * 1.0867 = 70.6px), not the native 65px. */
+  height: calc(65px * 1.0867);
 }
 
 .captcha > div {
-  width: 100%;
+  transform: scale(1.0867);
+  transform-origin: left top;
+  /* Keep the widget at its native size so its internals lay out correctly. */
+  width: 300px;
+  flex: 0 0 auto;
 }
 
-.captcha iframe {
-  width: 100% !important;
-  max-width: 100%;
-}
-
-/* On narrow phones the card's content box can be narrower than the widget's
-   fixed 300px. Chrome rejects scale(calc(...)) outright (verified: the whole
-   declaration is dropped and transform stays "none"), so the scale is set
-   with a CSS variable and applied through a plain scale() per breakpoint.
-   Each value is chosen so the scaled 300px widget fits the content box. */
+/* On narrow phones the card's content box can be narrower than 300px, so the
+   widget is scaled down to fit rather than overflowing the card edge. */
 @media (max-width: 380px) {
-  .captcha {
-    /* 300px * 0.92 = 276px, fits a 380px viewport's 308px content box. */
-    transform: scale(0.92);
-    transform-origin: left top;
-    margin-bottom: -0.4rem;
-  }
+  .captcha { height: calc(65px * 0.92); }
+  .captcha > div { transform: scale(0.92); }
 }
 
 @media (max-width: 350px) {
-  .captcha {
-    /* 300px * 0.86 = 258px, fits a 350px viewport's 278px content box. */
-    transform: scale(0.86);
-    margin-bottom: -0.8rem;
-  }
+  .captcha { height: calc(65px * 0.86); }
+  .captcha > div { transform: scale(0.86); }
 }
 
 @media (max-width: 330px) {
-  .captcha {
-    /* 300px * 0.78 = 234px, fits a 320px viewport's 248px content box. */
-    transform: scale(0.78);
-    margin-bottom: -1.3rem;
-  }
+  .captcha { height: calc(65px * 0.78); }
+  .captcha > div { transform: scale(0.78); }
 }
 
 .auth-forgot {
