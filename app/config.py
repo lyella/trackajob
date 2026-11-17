@@ -67,6 +67,21 @@ class Settings(BaseSettings):
 
     resend_api_key: str = ""
 
+    # Mailgun (what Squarespace uses under the hood). MAILGUN_DOMAIN is the
+    # sending domain such as mg.yourdomain.com, not the address in EMAIL_FROM.
+    # Region matters: US accounts use api.mailgun.net, EU accounts use
+    # api.eu.mailgun.net, and the wrong one fails with a bare 401.
+    mailgun_api_key: str = ""
+    mailgun_domain: str = ""
+    mailgun_region: str = "us"
+
+    # --- Login verification ------------------------------------------------
+    # A 6-digit code is emailed when a login comes from a country or device
+    # the account has not used before. Set to False to disable the check
+    # entirely (useful while email is still being set up).
+    login_code_enabled: bool = True
+    login_code_minutes: int = 10
+
     # --- Bot protection ---------------------------------------------------
     # Cloudflare Turnstile. The site key is public and served to the browser;
     # the secret stays on the server.

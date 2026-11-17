@@ -1,10 +1,11 @@
 """Outbound email.
 
-A provider interface with three drivers, chosen by configuration:
+A provider interface with four drivers, chosen by configuration:
 
 - ``console`` (default): prints the message to the server log. This is what
   makes every flow testable before any mail credentials exist, and it is
   deliberately loud so it can never be mistaken for real delivery.
+- ``mailgun``: the Mailgun HTTP API (what Squarespace uses under the hood).
 - ``smtp``: any mail server (Gmail, Fastmail, a company relay).
 - ``resend``: the Resend HTTP API.
 
@@ -53,6 +54,48 @@ def _send_console(message: Message) -> None:
     print(line, flush=True)
     print(message.text, flush=True)
     print(line, flush=True)
+
+
+def _send_mailgun(message: Message) -> None:
+    """Mailgun HTTP API.
+
+    Mailgun splits regions: US accounts live on api.mailgun.net and EU
+    accounts on api.eu.mailgun.net. Using the wrong host returns 401 with no
+    useful detail, so the region is explicit configuration rather than a
+    guess. MAILGUN_DOMAIN is the sending domain (mg.yourdomain.com), not the
+    address in EMAIL_FROM.
+    """
+    settings = get_settings()
+    if not settings.mailgun_api_key or not settings.mailgun_domain:
+        raise EmailError("Email is not configured. Ask the site owner to set it up.")
+
+    host = "api.eu.mailgun.net" if settings.mailgun_region.lower() == "eu" else "api.mailgun.net"
+    url = f"https://{host}/v3/{settings.mailgun_domain}/messages"
+    data = {
+        "from": _from_address(),
+        "to": message.to,
+        "subject": message.subject,
+        "text": message.text,
+    }
+    if message.html:
+        data["html"] = message.html
+
+    try:
+        response = httpx.post(
+            url,
+            auth=("api", settings.mailgun_api_key),
+            data=data,
+            timeout=15,
+        )
+    except httpx.HTTPError as exc:
+        raise EmailError("We could not send that email right now. Try again in a moment.") from exc
+
+    if response.status_code >= 400:
+        # Log the provider's reason for the operator, but never show it to a
+        # user: it can contain account details.
+        print(f"WARNING: mailgun rejected the message ({response.status_code}): "
+              f"{response.text[:300]}", flush=True)
+        raise EmailError("We could not send that email right now. Try again in a moment.")
 
 
 def _send_smtp(message: Message) -> None:
@@ -114,6 +157,9 @@ def send(message: Message) -> str:
     if driver == "console":
         _send_console(message)
         return "console"
+    if driver == "mailgun":
+        _send_mailgun(message)
+        return "mailgun"
     if driver == "smtp":
         _send_smtp(message)
         return "smtp"
@@ -148,6 +194,30 @@ def link_delivery_allowed() -> bool:
 # --------------------------------------------------------------------------
 # Message templates
 # --------------------------------------------------------------------------
+
+
+def login_code_email(to: str, code: str, minutes: int, country: str = "") -> Message:
+    where = f" from {country}" if country else ""
+    return Message(
+        to=to,
+        subject=f"Your TrackAJob sign-in code: {code}",
+        text=(
+            f"Your TrackAJob sign-in code is {code}\n\n"
+            f"Someone tried to sign in to your account{where} from a device we do not "
+            f"recognise. Enter this code to finish signing in.\n\n"
+            f"The code expires in {minutes} minutes and works once.\n"
+            "If this was not you, change your password now: someone has it.\n"
+        ),
+        html=(
+            '<div style="font-family:system-ui,sans-serif;font-size:15px;line-height:1.6">'
+            "<p>Your TrackAJob sign-in code is:</p>"
+            f'<p style="font-size:30px;font-weight:700;letter-spacing:6px;margin:12px 0">{code}</p>'
+            f"<p>Someone tried to sign in to your account{where} from a device we do not "
+            "recognise. Enter this code to finish signing in.</p>"
+            f'<p style="color:#666">The code expires in {minutes} minutes and works once. '
+            "If this was not you, change your password now: someone has it.</p></div>"
+        ),
+    )
 
 
 def verification_email(to: str, link: str, hours: int) -> Message:

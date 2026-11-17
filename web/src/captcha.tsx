@@ -70,8 +70,29 @@ export function Captcha({
   theme: 'light' | 'dark'
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const widgetId = useRef<string | null>(null)
   const [error, setError] = useState('')
+  const [scale, setScale] = useState(1.0867)
+
+  // Turnstile draws a fixed 300px box. Measure the space actually available
+  // and scale the widget to fill it exactly. Breakpoints cannot do this: the
+  // content width is fluid (326px on desktop, 246px on a 320px phone), and
+  // fixed thresholds left the widget 10px too wide at 390px and 24px too
+  // narrow at 430px. A ResizeObserver keeps it correct through resizes and
+  // rotation.
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => {
+      const available = el.clientWidth
+      if (available > 0) setScale(available / 300)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -103,7 +124,7 @@ export function Captcha({
   }, [siteKey, theme])
 
   return (
-    <div className="captcha">
+    <div className="captcha" ref={wrapRef} style={{ ['--captcha-scale' as string]: scale }}>
       <div ref={ref} />
       {error && <p className="field-error">{error}</p>}
     </div>

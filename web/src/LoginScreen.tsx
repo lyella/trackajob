@@ -6,6 +6,13 @@ import { Alert, Button, Field } from './ui'
 
 type Mode = 'login' | 'signup' | 'forgot'
 
+type LoginChallenge = {
+  challenge: string
+  sent_to: string
+  country: string
+  dev_code: string
+}
+
 /** Friendly copy for the auth failures the API can return. */
 function humanizeAuthError(message: string): string {
   const m = message.toLowerCase()
@@ -40,6 +47,9 @@ export function LoginScreen({
   // Set when no mail provider is configured and the API hands the link back,
   // so the user is not stuck waiting for an email that will never arrive.
   const [devLink, setDevLink] = useState<string | null>(null)
+  // Set when the password was right but the location is unfamiliar.
+  const [challenge, setChallenge] = useState<LoginChallenge | null>(null)
+  const [code, setCode] = useState('')
 
   const captchaConfig = useCaptchaConfig()
   const { theme } = useTheme()
@@ -78,7 +88,11 @@ export function LoginScreen({
         return
       }
 
-      const user = await api<User & { verification_link?: string }>(`/api/auth/${mode}`, {
+      const result = await api<
+        | { status: 'ok'; user: User }
+        | { status: 'code_required'; challenge: string; sent_to: string; country: string; dev_code: string }
+        | (User & { verification_link?: string })
+      >(`/api/auth/${mode}`, {
         method: 'POST',
         body: JSON.stringify({
           email: email.trim(),
@@ -86,6 +100,25 @@ export function LoginScreen({
           captcha_token: captchaToken,
         }),
       })
+
+      // Login from an unfamiliar place: a code is on its way.
+      if ('status' in result && result.status === 'code_required') {
+        setChallenge({
+          challenge: result.challenge,
+          sent_to: result.sent_to,
+          country: result.country,
+          dev_code: result.dev_code,
+        })
+        setCode('')
+        resetCaptcha(setCaptchaToken)
+        return
+      }
+      if ('status' in result && result.status === 'ok') {
+        onSignedIn(result.user)
+        return
+      }
+
+      const user = result as User & { verification_link?: string }
       if (user.verification_link) {
         // No mail provider is configured: show the link instead of sending
         // the user to an inbox that will never receive anything.
@@ -97,6 +130,24 @@ export function LoginScreen({
     } catch (err) {
       setError(humanizeAuthError(errorMessage(err)))
       resetCaptcha(setCaptchaToken)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function submitCode(e: FormEvent) {
+    e.preventDefault()
+    if (!challenge || busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const r = await api<{ status: string; user: User }>('/api/auth/login/verify', {
+        method: 'POST',
+        body: JSON.stringify({ challenge: challenge.challenge, code: code.trim() }),
+      })
+      onSignedIn(r.user)
+    } catch (err) {
+      setError(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -149,36 +200,90 @@ export function LoginScreen({
           </span>
           <div>
             <h1 style={{ fontSize: '1.6rem' }}>
-              {isForgot ? 'Reset your password' : 'TrackAJob'}
+              {challenge ? 'Check your email' : isForgot ? 'Reset your password' : 'TrackAJob'}
             </h1>
             <p className="auth-tagline">
-              {isForgot
-                ? 'Enter your email and we will send you a reset link.'
-                : isSignup
-                  ? 'Create an account to start tracking.'
-                  : 'Welcome back. Sign in to continue.'}
+              {challenge
+                ? `We sent a 6-digit code to ${challenge.sent_to}.`
+                : isForgot
+                  ? 'Enter your email and we will send you a reset link.'
+                  : isSignup
+                    ? 'Create an account to start tracking.'
+                    : 'Welcome back. Sign in to continue.'}
             </p>
           </div>
         </div>
 
-        <form className="auth-body" onSubmit={submit} noValidate>
-          <Field label="Email">
-            {(p) => (
-              <input
-                {...p}
-                type="email"
-                name="email"
-                autoComplete="email"
-                spellCheck={false}
-                autoCapitalize="none"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoFocus
-                required
-              />
+        {challenge ? (
+          <form className="auth-body" onSubmit={submitCode} noValidate>
+            <Field
+              label="6-digit code"
+              hint={
+                challenge.country
+                  ? `This sign-in came from a new location (${challenge.country}). Enter the code to confirm it was you.`
+                  : 'Enter the code from the email to finish signing in.'
+              }
+            >
+              {(p) => (
+                <input
+                  {...p}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  className="code-input"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  autoFocus
+                  required
+                />
+              )}
+            </Field>
+
+            {challenge.dev_code && (
+              <Alert tone="info">
+                Email delivery is not configured, so here is the code: <strong>{challenge.dev_code}</strong>
+              </Alert>
             )}
-          </Field>
+
+            {error && <Alert tone="error">{error}</Alert>}
+
+            <Button type="submit" variant="primary" block loading={busy} disabled={code.length < 6}>
+              {busy ? 'Checking…' : 'Confirm and sign in'}
+            </Button>
+            <button
+              type="button"
+              className="link-btn auth-forgot"
+              onClick={() => {
+                setChallenge(null)
+                setCode('')
+                setError('')
+                setPassword('')
+              }}
+            >
+              Use a different account
+            </button>
+          </form>
+        ) : (
+          <form className="auth-body" onSubmit={submit} noValidate>
+            <Field label="Email">
+              {(p) => (
+                <input
+                  {...p}
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoFocus
+                  required
+                />
+              )}
+            </Field>
 
           {!isForgot && (
             <Field
@@ -248,26 +353,29 @@ export function LoginScreen({
               Forgot your password?
             </button>
           )}
-        </form>
+          </form>
+        )}
 
-        <p className="auth-footer">
-          {isForgot ? (
-            <button type="button" className="link-btn" onClick={() => switchMode('login')}>
-              Back to sign in
-            </button>
-          ) : (
-            <>
-              {isSignup ? 'Already have an account? ' : 'New to TrackAJob? '}
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => switchMode(isSignup ? 'login' : 'signup')}
-              >
-                {isSignup ? 'Sign in' : 'Create an account'}
+        {!challenge && (
+          <p className="auth-footer">
+            {isForgot ? (
+              <button type="button" className="link-btn" onClick={() => switchMode('login')}>
+                Back to sign in
               </button>
-            </>
-          )}
-        </p>
+            ) : (
+              <>
+                {isSignup ? 'Already have an account? ' : 'New to TrackAJob? '}
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => switchMode(isSignup ? 'login' : 'signup')}
+                >
+                  {isSignup ? 'Sign in' : 'Create an account'}
+                </button>
+              </>
+            )}
+          </p>
+        )}
       </div>
     </div>
   )

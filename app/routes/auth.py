@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app import captcha, emailer, ratelimit
+from app import captcha, emailer, loginverify, ratelimit
 from app.auth import (
     RESET,
     VERIFY,
@@ -42,6 +42,7 @@ from app.schemas import (
     SignupOut,
     UserOut,
     VerifyEmailIn,
+    VerifyLoginCodeIn,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -171,7 +172,7 @@ def login(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> UserOut:
+) -> dict:
     ip = _client_ip(request) or "unknown"
     email_key = payload.email.lower().strip()
     # Two ceilings. The per-address limit is the strict one; the per-IP
@@ -187,11 +188,73 @@ def login(
         ratelimit.record(db, "login_ip", ip)
         raise HTTPException(status_code=401, detail="invalid email or password")
 
-    # A successful login clears the slate, so a few typos do not linger.
+    # The password is right. Now decide whether this location is familiar.
+    fingerprint = loginverify.fingerprint_for(
+        request.headers.get("user-agent", ""), request.headers.get("accept-language", "")
+    )
+    country = loginverify.country_for(request.headers)
+
+    if loginverify.needs_verification(db, user, fingerprint, country):
+        try:
+            token, code = loginverify.start_challenge(db, user, fingerprint, country, ip)
+        except emailer.EmailError as exc:
+            # Without email we cannot verify, and signing in anyway would
+            # quietly skip the check. Say so instead.
+            raise HTTPException(status_code=503, detail=str(exc))
+        # The code is only echoed when the console driver is active, so the
+        # flow is testable without a mail provider. Never in production.
+        echo = code if emailer.link_delivery_allowed() else ""
+        return {
+            "status": "code_required",
+            "challenge": token,
+            "country": country,
+            "sent_to": _mask_email(user.email),
+            "dev_code": echo,
+        }
+
+    # Familiar device: sign in and remember it.
     ratelimit.clear(db, "login", email_key)
+    loginverify.remember(db, user, fingerprint, country)
     token = create_session(db, user.id)
     _set_session_cookie(response, token)
-    return _user_out(user)
+    return {"status": "ok", "user": _user_out(user).model_dump()}
+
+
+@router.post("/login/verify")
+def verify_login_code(
+    payload: VerifyLoginCodeIn,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Finish a login that needed a code."""
+    ip = _client_ip(request) or "unknown"
+    _limit(db, "login_verify", ip)
+
+    result = loginverify.verify_challenge(db, payload.challenge, payload.code)
+    if result is None:
+        ratelimit.record(db, "login_verify", ip)
+        raise HTTPException(
+            status_code=401,
+            detail="That code is wrong or has expired. Sign in again to get a new one.",
+        )
+
+    user, row = result
+    ratelimit.clear(db, "login", user.email)
+    # A verified challenge means the location is now trusted.
+    loginverify.remember(db, user, row.fingerprint, row.country)
+    token = create_session(db, user.id)
+    _set_session_cookie(response, token)
+    return {"status": "ok", "user": _user_out(user).model_dump()}
+
+
+def _mask_email(email: str) -> str:
+    """a***@example.com, so the login screen can say where the code went
+    without printing the full address to whoever is at the keyboard."""
+    if "@" not in email:
+        return email
+    name, domain = email.split("@", 1)
+    return f"{name[:1]}***@{domain}"
 
 
 @router.post("/logout")

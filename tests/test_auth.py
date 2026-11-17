@@ -62,7 +62,7 @@ def test_login_accepts_mixed_case_email(client, new_email):
         json={"email": new_email.upper(), "password": "correct horse battery staple"},
     )
     assert r.status_code == 200
-    assert r.json()["email"] == new_email
+    assert r.json()["user"]["email"] == new_email
 
 
 def test_login_rejects_wrong_password(client, new_email):

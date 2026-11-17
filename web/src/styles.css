@@ -1699,48 +1699,40 @@ details.job-desc > summary:hover { color: var(--ink); }
 .verify-banner-text { flex: 1 1 20rem; min-width: 0; }
 .verify-banner-error { color: var(--danger); font-weight: 500; }
 
-/* Turnstile renders a fixed 300px-wide widget and lays its contents out for
-   exactly that size. Setting width:100% on the container only adds dead space
-   on the right, because the inner layout does not reflow. That was the bug:
-   the box looked full width while the content sat in the left 300px.
+/* Turnstile draws a fixed 300px-wide widget and lays its contents out for
+   exactly that size, so it cannot simply be stretched: the inner layout does
+   not reflow, which leaves dead space on the right.
 
-   The fix is to scale the widget itself. The card's content box is 326px at
-   its widest, so 326/300 = 1.0867. The container reserves the scaled height
-   so the scale does not leave a gap above the button.
-
-   Chrome rejects scale(calc(...)) outright (the declaration is dropped and
-   transform stays "none"), so each breakpoint uses a plain number. */
+   It is scaled instead, and the factor is measured at runtime by the Captcha
+   component (available width / 300) and passed in as --captcha-scale. Two
+   earlier attempts failed: fixed breakpoints could not track the fluid
+   content width (the widget was 10px too wide at 390px and 24px too narrow
+   at 430px), and container queries were dropped by the minifier. Measuring
+   is the only approach that is correct at every width. */
 .captcha {
   display: flex;
   justify-content: flex-start;
   min-width: 0;
-  /* Reserve the scaled height (65px * 1.0867 = 70.6px), not the native 65px. */
-  height: calc(65px * 1.0867);
+  /* 65px is Turnstile's native height; the factor scales it too. */
+  height: calc(65px * var(--captcha-scale, 1.0867));
 }
 
 .captcha > div {
-  transform: scale(1.0867);
-  transform-origin: left top;
-  /* Keep the widget at its native size so its internals lay out correctly. */
+  /* Native size keeps Turnstile's internals laid out correctly. */
   width: 300px;
   flex: 0 0 auto;
+  transform: scale(var(--captcha-scale, 1.0867));
+  transform-origin: left top;
 }
 
-/* On narrow phones the card's content box can be narrower than 300px, so the
-   widget is scaled down to fit rather than overflowing the card edge. */
-@media (max-width: 380px) {
-  .captcha { height: calc(65px * 0.92); }
-  .captcha > div { transform: scale(0.92); }
-}
-
-@media (max-width: 350px) {
-  .captcha { height: calc(65px * 0.86); }
-  .captcha > div { transform: scale(0.86); }
-}
-
-@media (max-width: 330px) {
-  .captcha { height: calc(65px * 0.78); }
-  .captcha > div { transform: scale(0.78); }
+/* The 6-digit login code: large, spaced, and monospaced so it is easy to
+   read off a phone screen and type accurately. */
+.code-input {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  letter-spacing: 0.5em;
+  text-align: center;
+  padding: 0.6rem 0.5rem;
 }
 
 .auth-forgot {

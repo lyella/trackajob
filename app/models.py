@@ -10,6 +10,50 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+class KnownDevice(Base):
+    """A device + country pair that has already passed login verification.
+
+    Stored so a familiar browser in a familiar country signs in without a
+    code. The fingerprint is a hash of coarse browser signals, never a full
+    user agent: it only needs to be stable enough to recognise the same
+    browser, and storing less is better.
+    """
+
+    __tablename__ = "known_devices"
+    __table_args__ = (UniqueConstraint("user_id", "fingerprint", "country"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    country: Mapped[str] = mapped_column(String(8), default="")
+    first_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LoginChallenge(Base):
+    """A pending login that needs a 6-digit code, plus the code itself.
+
+    Only a hash of the code is stored, so a database leak does not hand out
+    working login codes. The challenge row is the short-lived proof that the
+    password was already correct, which is why it is separate from a session:
+    no session exists until the code is verified.
+    """
+
+    __tablename__ = "login_challenges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    challenge: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    country: Mapped[str] = mapped_column(String(8), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class RateLimitHit(Base):
     """One row per counted attempt, used to throttle auth endpoints.
 

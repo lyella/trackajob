@@ -51,6 +51,9 @@ LIMITS: dict[str, tuple[int, int]] = {
     "reset": (10, 60 * 60),
     # Verification resends: 5 per hour per account.
     "resend": (5, 60 * 60),
+    # Login code submissions: 20 per hour per IP. The per-challenge attempt
+    # counter is the real brute-force defence; this is a backstop.
+    "login_verify": (20, 60 * 60),
 }
 
 
